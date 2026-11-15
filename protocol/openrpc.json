@@ -1,0 +1,565 @@
+{
+  "components": {
+    "schemas": {
+      "CommandExecuteParams": {
+        "properties": {
+          "args": {
+            "default": [],
+            "items": true,
+            "type": "array"
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "type": "object"
+      },
+      "CommandRef": {
+        "description": "A command invocation attached to a piece of UI.",
+        "properties": {
+          "args": {
+            "items": true,
+            "type": "array"
+          },
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ],
+        "type": "object"
+      },
+      "ConfigDidChangeParams": {
+        "properties": {
+          "changes": {
+            "additionalProperties": true,
+            "description": "Changed keys with their new effective values.",
+            "type": "object"
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "type": "object"
+      },
+      "ConfigGetParams": {
+        "properties": {
+          "key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key"
+        ],
+        "type": "object"
+      },
+      "DocumentDidSaveParams": {
+        "properties": {
+          "uri": {
+            "type": "string"
+          },
+          "version": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "uri",
+          "version"
+        ],
+        "type": "object"
+      },
+      "Empty": {
+        "description": "No payload. Serializes as `{}`.",
+        "type": "object"
+      },
+      "InitializeParams": {
+        "properties": {
+          "host": {
+            "$ref": "#/components/schemas/PeerInfo"
+          },
+          "pluginId": {
+            "description": "The id from the plugin's manifest.",
+            "type": "string"
+          },
+          "protocolVersion": {
+            "type": "string"
+          },
+          "workspaceFolder": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "protocolVersion",
+          "host",
+          "pluginId"
+        ],
+        "type": "object"
+      },
+      "InitializeResult": {
+        "properties": {
+          "plugin": {
+            "$ref": "#/components/schemas/PeerInfo"
+          },
+          "protocolVersion": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "protocolVersion",
+          "plugin"
+        ],
+        "type": "object"
+      },
+      "MessageLevel": {
+        "enum": [
+          "info",
+          "warning",
+          "error"
+        ],
+        "type": "string"
+      },
+      "PeerInfo": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version"
+        ],
+        "type": "object"
+      },
+      "ShowMessageParams": {
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/MessageLevel"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "level",
+          "message"
+        ],
+        "type": "object"
+      },
+      "TerminalWriteParams": {
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "terminal": {
+            "description": "Output channel name. Defaults to one named after the plugin.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "TreeItem": {
+        "description": "One row of a tree or list view.",
+        "properties": {
+          "collapsible": {
+            "default": false,
+            "description": "Whether the item can be expanded to request children.",
+            "type": "boolean"
+          },
+          "command": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CommandRef"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Run when the item is activated."
+          },
+          "description": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "icon": {
+            "description": "Name from the host's icon set; never a URL or markup.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "description": "Stable within the view; passed back as `parent` to fetch children.",
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "tooltip": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "label"
+        ],
+        "type": "object"
+      },
+      "ViewGetChildrenParams": {
+        "properties": {
+          "parent": {
+            "description": "Id of the item to expand; absent for the root.",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "viewId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "viewId"
+        ],
+        "type": "object"
+      },
+      "ViewGetChildrenResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TreeItem"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
+      "ViewRefreshParams": {
+        "properties": {
+          "viewId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "viewId"
+        ],
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "JSON-RPC 2.0 over stdio with Content-Length framing. `x-direction` says which side may send a method; methods without `result` are notifications.",
+    "title": "openskele plugin protocol",
+    "version": "0.1.0"
+  },
+  "methods": [
+    {
+      "name": "initialize",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "host",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/PeerInfo"
+          }
+        },
+        {
+          "name": "pluginId",
+          "required": true,
+          "schema": {
+            "description": "The id from the plugin's manifest.",
+            "type": "string"
+          }
+        },
+        {
+          "name": "protocolVersion",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "workspaceFolder",
+          "required": false,
+          "schema": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/InitializeResult"
+        }
+      },
+      "x-direction": "hostToPlugin",
+      "x-kind": "request",
+      "x-params": {
+        "$ref": "#/components/schemas/InitializeParams"
+      }
+    },
+    {
+      "name": "shutdown",
+      "paramStructure": "by-name",
+      "params": [],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/Empty"
+        }
+      },
+      "x-direction": "hostToPlugin",
+      "x-kind": "request",
+      "x-params": {
+        "$ref": "#/components/schemas/Empty"
+      }
+    },
+    {
+      "name": "exit",
+      "paramStructure": "by-name",
+      "params": [],
+      "x-direction": "hostToPlugin",
+      "x-kind": "notification",
+      "x-params": {
+        "$ref": "#/components/schemas/Empty"
+      }
+    },
+    {
+      "name": "command/execute",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "args",
+          "required": false,
+          "schema": {
+            "default": [],
+            "items": true,
+            "type": "array"
+          }
+        },
+        {
+          "name": "command",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": true
+      },
+      "x-direction": "hostToPlugin",
+      "x-kind": "request",
+      "x-params": {
+        "$ref": "#/components/schemas/CommandExecuteParams"
+      }
+    },
+    {
+      "name": "view/getChildren",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "parent",
+          "required": false,
+          "schema": {
+            "description": "Id of the item to expand; absent for the root.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        {
+          "name": "viewId",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ViewGetChildrenResult"
+        }
+      },
+      "x-direction": "hostToPlugin",
+      "x-kind": "request",
+      "x-params": {
+        "$ref": "#/components/schemas/ViewGetChildrenParams"
+      }
+    },
+    {
+      "name": "config/didChange",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "changes",
+          "required": true,
+          "schema": {
+            "additionalProperties": true,
+            "description": "Changed keys with their new effective values.",
+            "type": "object"
+          }
+        }
+      ],
+      "x-direction": "hostToPlugin",
+      "x-kind": "notification",
+      "x-params": {
+        "$ref": "#/components/schemas/ConfigDidChangeParams"
+      }
+    },
+    {
+      "name": "document/didSave",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "uri",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "version",
+          "required": true,
+          "schema": {
+            "format": "uint32",
+            "minimum": 0,
+            "type": "integer"
+          }
+        }
+      ],
+      "x-direction": "hostToPlugin",
+      "x-kind": "notification",
+      "x-params": {
+        "$ref": "#/components/schemas/DocumentDidSaveParams"
+      }
+    },
+    {
+      "name": "window/showMessage",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "level",
+          "required": true,
+          "schema": {
+            "$ref": "#/components/schemas/MessageLevel"
+          }
+        },
+        {
+          "name": "message",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "x-direction": "pluginToHost",
+      "x-kind": "notification",
+      "x-params": {
+        "$ref": "#/components/schemas/ShowMessageParams"
+      }
+    },
+    {
+      "name": "terminal/write",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "data",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        },
+        {
+          "name": "terminal",
+          "required": false,
+          "schema": {
+            "description": "Output channel name. Defaults to one named after the plugin.",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      ],
+      "x-direction": "pluginToHost",
+      "x-kind": "notification",
+      "x-params": {
+        "$ref": "#/components/schemas/TerminalWriteParams"
+      }
+    },
+    {
+      "name": "config/get",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "key",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": true
+      },
+      "x-direction": "pluginToHost",
+      "x-kind": "request",
+      "x-params": {
+        "$ref": "#/components/schemas/ConfigGetParams"
+      }
+    },
+    {
+      "name": "view/refresh",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "viewId",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "x-direction": "pluginToHost",
+      "x-kind": "notification",
+      "x-params": {
+        "$ref": "#/components/schemas/ViewRefreshParams"
+      }
+    }
+  ],
+  "openrpc": "1.3.2"
+}

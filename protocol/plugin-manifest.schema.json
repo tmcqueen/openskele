@@ -1,0 +1,255 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "CommandContribution": {
+      "properties": {
+        "category": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "type": "object"
+    },
+    "ConfigurationContribution": {
+      "properties": {
+        "properties": {
+          "additionalProperties": true,
+          "description": "Setting key to its JSON Schema. `default` supplies the default value.",
+          "type": "object"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "properties"
+      ],
+      "type": "object"
+    },
+    "Contributes": {
+      "properties": {
+        "commands": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/CommandContribution"
+          },
+          "type": "array"
+        },
+        "configuration": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ConfigurationContribution"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "keybindings": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/KeybindingContribution"
+          },
+          "type": "array"
+        },
+        "menus": {
+          "additionalProperties": {
+            "items": {
+              "$ref": "#/definitions/MenuContribution"
+            },
+            "type": "array"
+          },
+          "default": {},
+          "description": "Menu location (e.g. `menubar/Tools`, `view/title`) to entries.",
+          "type": "object"
+        },
+        "views": {
+          "default": [],
+          "items": {
+            "$ref": "#/definitions/ViewContribution"
+          },
+          "type": "array"
+        }
+      },
+      "type": "object"
+    },
+    "Entry": {
+      "properties": {
+        "args": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command": {
+          "type": "string"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "KeybindingContribution": {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "key": {
+          "description": "Chord such as `Ctrl+Shift+P`. `Mod` is Cmd on macOS and Ctrl elsewhere.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "command",
+        "key"
+      ],
+      "type": "object"
+    },
+    "MenuContribution": {
+      "properties": {
+        "command": {
+          "type": "string"
+        },
+        "group": {
+          "description": "Entries sharing a group are kept together; groups are separated.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "order": {
+          "default": 0,
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "command"
+      ],
+      "type": "object"
+    },
+    "ViewContribution": {
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "kind": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ViewKind"
+            }
+          ],
+          "default": "tree"
+        },
+        "location": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ViewLocation"
+            }
+          ],
+          "default": "sidebar"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title"
+      ],
+      "type": "object"
+    },
+    "ViewKind": {
+      "enum": [
+        "tree",
+        "list"
+      ],
+      "type": "string"
+    },
+    "ViewLocation": {
+      "enum": [
+        "sidebar",
+        "panel"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "activationEvents": {
+      "default": [],
+      "description": "When to start the process. Executing a contributed command or opening a\ncontributed view always activates the plugin; list `onStartup` to start eagerly.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "contributes": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Contributes"
+        }
+      ],
+      "default": {
+        "commands": [],
+        "keybindings": [],
+        "menus": {},
+        "views": []
+      }
+    },
+    "id": {
+      "description": "Unique id, conventionally `publisher.name`.",
+      "type": "string"
+    },
+    "main": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/Entry"
+        }
+      ],
+      "description": "How to start the sidecar. Relative paths resolve against the manifest's directory."
+    },
+    "name": {
+      "type": "string"
+    },
+    "protocol": {
+      "description": "Protocol version the plugin speaks, e.g. `\"0.1\"`.",
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "name",
+    "version",
+    "protocol",
+    "main"
+  ],
+  "title": "Manifest",
+  "type": "object"
+}

@@ -1,0 +1,241 @@
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Weak};
+
+use serde::Serialize;
+use serde_json::{json, Value};
+use skele_protocol::methods::{
+    CommandExecute, CommandExecuteParams, ConfigDidChange, ConfigDidChangeParams, DocumentDidSave,
+    DocumentDidSaveParams, ViewGetChildren, ViewGetChildrenParams,
+};
+use skele_protocol::view::TreeItem;
+
+use crate::commands::{CommandInfo, CommandRegistry, CommandTarget};
+use crate::config::{ConfigStore, Scope};
+use crate::document::DocumentStore;
+use crate::events::{EventBus, HostEvent};
+use crate::keybindings::{Keybinding, KeybindingRegistry};
+use crate::menus::{Menu, MenuEntry, MenuRegistry};
+use crate::plugin::{PluginInfo, PluginManager};
+use crate::pty::TerminalManager;
+use crate::views::{ViewInfo, ViewRegistry};
+use crate::{Error, Result};
+
+#[derive(Debug, Clone, Default)]
+pub struct WorkbenchOptions {
+    /// Where user-scope settings are persisted; in memory only when `None`.
+    pub user_settings: Option<PathBuf>,
+    /// The open workspace folder, enabling workspace-scope settings.
+    pub workspace: Option<PathBuf>,
+}
+
+/// Everything a front end needs to draw its chrome, in one round trip.
+#[derive(Debug, Clone, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(rename_all = "camelCase")]
+pub struct Snapshot {
+    pub commands: Vec<CommandInfo>,
+    pub menubar: Vec<Menu>,
+    pub keybindings: Vec<Keybinding>,
+    pub views: Vec<ViewInfo>,
+    pub plugins: Vec<PluginInfo>,
+    pub has_workspace: bool,
+}
+
+pub(crate) struct Inner {
+    pub(crate) commands: CommandRegistry,
+    pub(crate) menus: MenuRegistry,
+    pub(crate) keybindings: KeybindingRegistry,
+    pub(crate) views: ViewRegistry,
+    pub(crate) config: ConfigStore,
+    pub(crate) bus: EventBus,
+    pub(crate) plugins: PluginManager,
+    pub(crate) terminals: TerminalManager,
+    pub(crate) documents: DocumentStore,
+    pub(crate) workspace: Option<PathBuf>,
+}
+
+/// Handle to the workbench state. Cheap to clone.
+#[derive(Clone)]
+pub struct Workbench {
+    pub(crate) inner: Arc<Inner>,
+}
+
+impl Workbench {
+    pub fn new(options: WorkbenchOptions) -> Result<Self> {
+        let workspace_settings = options.workspace.as_deref().map(ConfigStore::workspace_file);
+        let workbench = Self {
+            inner: Arc::new(Inner {
+                commands: Default::default(),
+                menus: Default::default(),
+                keybindings: Default::default(),
+                views: Default::default(),
+                config: ConfigStore::open(options.user_settings, workspace_settings)?,
+                bus: Default::default(),
+                plugins: Default::default(),
+                terminals: Default::default(),
+                documents: Default::default(),
+                workspace: options.workspace,
+            }),
+        };
+        workbench.register_builtins()?;
+        Ok(workbench)
+    }
+
+    pub fn commands(&self) -> &CommandRegistry {
+        &self.inner.commands
+    }
+    pub fn menus(&self) -> &MenuRegistry {
+        &self.inner.menus
+    }
+    pub fn keybindings(&self) -> &KeybindingRegistry {
+        &self.inner.keybindings
+    }
+    pub fn views(&self) -> &ViewRegistry {
+        &self.inner.views
+    }
+    pub fn config(&self) -> &ConfigStore {
+        &self.inner.config
+    }
+    pub fn bus(&self) -> &EventBus {
+        &self.inner.bus
+    }
+    pub fn terminals(&self) -> &TerminalManager {
+        &self.inner.terminals
+    }
+    pub fn documents(&self) -> &DocumentStore {
+        &self.inner.documents
+    }
+    pub fn workspace(&self) -> Option<&Path> {
+        self.inner.workspace.as_deref()
+    }
+
+    pub fn menubar(&self) -> Vec<Menu> {
+        self.inner.menus.menubar(&self.inner.commands, &self.inner.keybindings)
+    }
+
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            commands: self.inner.commands.list(),
+            menubar: self.menubar(),
+            keybindings: self.inner.keybindings.list(),
+            views: self.inner.views.list(),
+            plugins: self.plugins(),
+            has_workspace: self.inner.config.has_workspace(),
+        }
+    }
+
+    /// Runs a command wherever it lives, starting its plugin if necessary.
+    pub async fn execute_command(&self, id: &str, args: Vec<Value>) -> Result<Value> {
+        let (_, target) = self.inner.commands.get(id).ok_or_else(|| Error::UnknownCommand(id.to_owned()))?;
+        match target {
+            CommandTarget::Builtin(handler) => handler(args).await,
+            CommandTarget::Plugin(plugin) => {
+                let peer = self.plugin_peer(&plugin).await?;
+                let params = CommandExecuteParams { command: id.to_owned(), args };
+                peer.request::<CommandExecute>(params, None).await
+            }
+        }
+    }
+
+    /// Fetches the rows of a contributed view from its plugin.
+    pub async fn view_children(&self, view_id: &str, parent: Option<String>) -> Result<Vec<TreeItem>> {
+        let view = self.inner.views.get(view_id).ok_or_else(|| Error::UnknownView(view_id.to_owned()))?;
+        let peer = self.plugin_peer(&view.plugin_id).await?;
+        let params = ViewGetChildrenParams { view_id: view_id.to_owned(), parent };
+        Ok(peer.request::<ViewGetChildren>(params, None).await?.items)
+    }
+
+    /// Validates and stores a setting, then tells the front end and running plugins.
+    pub fn set_config(&self, key: &str, value: Option<Value>, scope: Scope) -> Result<()> {
+        self.inner.config.set(key, value, scope)?;
+        let changes = BTreeMap::from([(key.to_owned(), self.inner.config.get(key))]);
+        self.notify_plugins::<ConfigDidChange>(ConfigDidChangeParams { changes });
+        self.inner.bus.emit(HostEvent::ConfigChanged { keys: vec![key.to_owned()] });
+        Ok(())
+    }
+
+    /// Writes a document buffer to disk, then tells the front end and running plugins.
+    pub fn save_document(&self, uri: &str) -> Result<u32> {
+        let version = self.inner.documents.save(uri)?;
+        self.notify_plugins::<DocumentDidSave>(DocumentDidSaveParams { uri: uri.to_owned(), version });
+        self.inner.bus.emit(HostEvent::DocumentSaved { uri: uri.to_owned(), version });
+        Ok(version)
+    }
+
+    pub async fn shutdown(&self) {
+        self.shutdown_plugins().await;
+        self.inner.terminals.close_all();
+    }
+
+    fn register_builtins(&self) -> Result<()> {
+        // Built-ins that only reveal UI do it by event: the front end decides how.
+        let open_panel = |inner: &Weak<Inner>, panel: &'static str| -> CommandTarget {
+            let inner = inner.clone();
+            CommandTarget::Builtin(Arc::new(move |_args| {
+                let inner = inner.upgrade();
+                Box::pin(async move {
+                    if let Some(inner) = inner {
+                        inner.bus.emit(HostEvent::OpenPanel { panel: panel.to_owned(), arg: None });
+                    }
+                    Ok(Value::Null)
+                })
+            }))
+        };
+        let weak = Arc::downgrade(&self.inner);
+        let builtins = [
+            ("workbench.showCommands", "Show All Commands", "commands", "menubar/View", "Mod+Shift+P"),
+            ("workbench.openSettings", "Open Settings", "settings", "menubar/File", "Mod+,"),
+            ("workbench.newTerminal", "New Terminal", "terminal", "menubar/View", "Mod+Shift+T"),
+        ];
+        for (id, title, panel, menu, key) in builtins {
+            let info = CommandInfo { id: id.to_owned(), title: title.to_owned(), category: None, source: None };
+            self.inner.commands.register(info, open_panel(&weak, panel))?;
+            self.inner.menus.add(menu, MenuEntry { command: id.to_owned(), group: None, order: 0, source: None });
+            self.inner.keybindings.register(Keybinding { key: key.to_owned(), command: id.to_owned(), source: None });
+        }
+
+        // Not in any menu: it needs a path, so it is for view items and other callers with one.
+        let inner = weak.clone();
+        let open_file = CommandTarget::Builtin(Arc::new(move |args| {
+            let inner = inner.upgrade();
+            Box::pin(async move {
+                let Some(path) = args.first().and_then(Value::as_str) else {
+                    return Err(Error::Other("workbench.openFile expects a file path".to_owned()));
+                };
+                if let Some(inner) = inner {
+                    inner.bus.emit(HostEvent::OpenPanel { panel: "editor".to_owned(), arg: Some(path.to_owned()) });
+                }
+                Ok(Value::Null)
+            })
+        }));
+        let info = CommandInfo {
+            id: "workbench.openFile".to_owned(),
+            title: "Open File".to_owned(),
+            category: None,
+            source: None,
+        };
+        self.inner.commands.register(info, open_file)?;
+
+        let properties = BTreeMap::from([
+            (
+                "workbench.colorTheme".to_owned(),
+                json!({
+                    "type": "string",
+                    "enum": ["dark", "light"],
+                    "default": "dark",
+                    "description": "Color theme of the workbench."
+                }),
+            ),
+            (
+                "terminal.shell".to_owned(),
+                json!({
+                    "type": "string",
+                    "default": "",
+                    "description": "Program to run in new terminals. Empty uses your default shell."
+                }),
+            ),
+        ]);
+        self.inner.config.register_section(None, "Workbench", &properties)
+    }
+}

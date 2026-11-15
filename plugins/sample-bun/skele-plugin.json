@@ -1,0 +1,52 @@
+{
+  "$schema": "../../protocol/plugin-manifest.schema.json",
+  "id": "sample.hello",
+  "name": "Hello",
+  "version": "0.1.0",
+  "protocol": "0.1",
+  "main": { "command": "bun", "args": ["run", "src/main.ts"] },
+  "activationEvents": [],
+  "contributes": {
+    "commands": [
+      { "id": "hello.greet", "title": "Greet", "category": "Hello" },
+      { "id": "hello.clear", "title": "Clear Greetings", "category": "Hello" }
+    ],
+    "menus": {
+      "menubar/Tools": [
+        { "command": "hello.greet", "group": "1_hello", "order": 1 },
+        { "command": "hello.clear", "group": "1_hello", "order": 2 }
+      ]
+    },
+    "keybindings": [{ "command": "hello.greet", "key": "Mod+Alt+G" }],
+    "views": [{ "id": "hello.greetings", "title": "Greetings", "kind": "tree", "location": "sidebar" }],
+    "configuration": {
+      "title": "Hello",
+      "properties": {
+        "hello.name": {
+          "type": "string",
+          "default": "World",
+          "minLength": 1,
+          "description": "Who to greet."
+        },
+        "hello.greeting": {
+          "type": "string",
+          "enum": ["Hello", "Hi", "Ahoy"],
+          "default": "Hello",
+          "description": "Word that opens the greeting."
+        },
+        "hello.repeat": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 5,
+          "default": 1,
+          "description": "How many times to greet per invocation."
+        },
+        "hello.shout": {
+          "type": "boolean",
+          "default": false,
+          "description": "Greet in upper case."
+        }
+      }
+    }
+  }
+}

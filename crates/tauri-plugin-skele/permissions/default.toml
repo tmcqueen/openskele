@@ -1,0 +1,17 @@
+[default]
+description = "Lets a webview render the workbench and drive it through its commands."
+permissions = [
+    "allow-snapshot",
+    "allow-subscribe",
+    "allow-execute-command",
+    "allow-view-children",
+    "allow-config-sections",
+    "allow-config-set",
+    "allow-terminal-open",
+    "allow-terminal-write",
+    "allow-terminal-resize",
+    "allow-terminal-close",
+    "allow-document-open",
+    "allow-document-set-text",
+    "allow-document-save",
+]

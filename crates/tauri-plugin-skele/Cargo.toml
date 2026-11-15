@@ -1,0 +1,21 @@
+[package]
+name = "tauri-plugin-skele"
+description = "Exposes the openskele workbench core to a Tauri webview"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+links = "tauri-plugin-skele"
+
+[dependencies]
+skele-core = { workspace = true, features = ["specta"] }
+skele-protocol = { workspace = true, features = ["specta"] }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+specta.workspace = true
+tauri = { version = "2", features = [] }
+tauri-specta = { version = "=2.0.0-rc.29", features = ["derive", "typescript"] }
+specta-typescript = "0.0.15"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }

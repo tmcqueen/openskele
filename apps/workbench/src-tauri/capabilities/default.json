@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The workbench window may talk to the workbench core and nothing else.",
+  "windows": ["main"],
+  "permissions": ["skele:default"]
+}
