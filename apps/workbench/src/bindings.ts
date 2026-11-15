@@ -24,9 +24,24 @@ export const commands = {
 	documentOpen: (path: string, options?: InvokeOptions) => __TAURI_INVOKE<DocumentSnapshot>("plugin:skele|document_open", { path }, options),
 	documentSetText: (uri: string, text: string, options?: InvokeOptions) => __TAURI_INVOKE<number>("plugin:skele|document_set_text", { uri, text }, options),
 	documentSave: (uri: string, options?: InvokeOptions) => __TAURI_INVOKE<number>("plugin:skele|document_save", { uri }, options),
+	/**  The title bar style in effect for this run. */
+	chrome: (options?: InvokeOptions) => __TAURI_INVOKE<Chrome>("plugin:skele|chrome", undefined, options),
+	windowStartDrag: (options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|window_start_drag", undefined, options),
+	windowMinimize: (options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|window_minimize", undefined, options),
+	windowToggleMaximize: (options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|window_toggle_maximize", undefined, options),
+	windowClose: (options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|window_close", undefined, options),
 };
 
 /* Types */
+/**
+ *  The chrome in effect. Decided once at startup, so changing the setting
+ *  takes a restart.
+ */
+export type Chrome = {
+	titleBar: TitleBar,
+	platform: Platform,
+};
+
 export type CommandInfo = CommandInfo_Serialize | CommandInfo_Deserialize;
 
 export type CommandInfo_Deserialize = {
@@ -167,6 +182,8 @@ export type Menu_Serialize = {
 
 export type MessageLevel = "info" | "warning" | "error";
 
+export type Platform = "linux" | "macos" | "windows";
+
 export type PluginInfo = {
 	id: string,
 	name: string,
@@ -208,6 +225,12 @@ export type Snapshot_Serialize = {
 };
 
 export type TerminalEvent = { type: "data"; data: string } | { type: "exit" };
+
+export type TitleBar = 
+/**  The webview draws the title bar, menu and window controls. */
+"custom" | 
+/**  The OS frame and a native menu bar. */
+"native";
 
 /**  One row of a tree or list view. */
 export type TreeItem = TreeItem_Serialize | TreeItem_Deserialize;

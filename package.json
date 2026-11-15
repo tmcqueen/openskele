@@ -9,6 +9,7 @@
   "scripts": {
     "gen:protocol": "cargo run -q -p skele-protocol --bin gen-protocol && bun scripts/gen-sdk.ts",
     "gen:bindings": "cargo run -q -p tauri-plugin-skele --example export-bindings",
+    "build:plugins": "dotnet build plugins/sample-dotnet -c Release -nologo",
     "dev": "cd apps/workbench && bun tauri dev",
     "build": "cd apps/workbench && bun tauri build",
     "typecheck": "bun run --filter '*' typecheck",

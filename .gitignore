@@ -3,3 +3,7 @@ node_modules/
 dist/
 apps/workbench/src-tauri/gen/
 .skele/
+sdk/dotnet/**/bin/
+sdk/dotnet/**/obj/
+plugins/*/bin/
+plugins/*/obj/

@@ -12,8 +12,10 @@ use skele_core::pty::{TerminalEvent, TerminalOptions};
 use skele_core::{HostEvent, Snapshot, Workbench};
 use tauri::async_runtime::JoinHandle;
 use tauri::ipc::Channel;
-use tauri::{State, Webview};
+use tauri::{State, Webview, Window};
 use tokio::sync::broadcast::error::RecvError;
+
+use crate::chrome::Chrome;
 
 type Result<T> = std::result::Result<T, String>;
 
@@ -156,4 +158,42 @@ pub fn document_set_text(workbench: State<'_, Workbench>, uri: String, text: Str
 #[specta::specta]
 pub fn document_save(workbench: State<'_, Workbench>, uri: String) -> Result<u32> {
     workbench.save_document(&uri).map_err(message)
+}
+
+/// The title bar style in effect for this run.
+#[tauri::command]
+#[specta::specta]
+pub fn chrome(chrome: State<'_, Chrome>) -> Chrome {
+    *chrome
+}
+
+// The custom title bar's controls. They act on the calling window, and going
+// through the workbench plugin keeps the webview from needing window permissions.
+
+#[tauri::command]
+#[specta::specta]
+pub fn window_start_drag(window: Window) -> Result<()> {
+    window.start_dragging().map_err(message)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn window_minimize(window: Window) -> Result<()> {
+    window.minimize().map_err(message)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn window_toggle_maximize(window: Window) -> Result<()> {
+    if window.is_maximized().map_err(message)? {
+        window.unmaximize().map_err(message)
+    } else {
+        window.maximize().map_err(message)
+    }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn window_close(window: Window) -> Result<()> {
+    window.close().map_err(message)
 }

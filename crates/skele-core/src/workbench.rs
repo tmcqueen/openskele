@@ -235,6 +235,24 @@ impl Workbench {
                     "description": "Program to run in new terminals. Empty uses your default shell."
                 }),
             ),
+            (
+                "terminal.fontFamily".to_owned(),
+                json!({
+                    "type": "string",
+                    "default": "",
+                    "description": "Font for terminals and the output panel, as a CSS font-family list. Empty uses the default monospace font."
+                }),
+            ),
+            (
+                "terminal.fontSize".to_owned(),
+                json!({
+                    "type": "number",
+                    "minimum": 6,
+                    "maximum": 40,
+                    "default": 13,
+                    "description": "Font size for terminals and the output panel, in pixels."
+                }),
+            ),
         ]);
         self.inner.config.register_section(None, "Workbench", &properties)
     }

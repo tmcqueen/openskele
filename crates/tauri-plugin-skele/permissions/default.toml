@@ -14,4 +14,9 @@ permissions = [
     "allow-document-open",
     "allow-document-set-text",
     "allow-document-save",
+    "allow-chrome",
+    "allow-window-start-drag",
+    "allow-window-minimize",
+    "allow-window-toggle-maximize",
+    "allow-window-close",
 ]

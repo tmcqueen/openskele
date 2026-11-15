@@ -18,26 +18,42 @@ function theme() {
   };
 }
 
-const open = new Set<Terminal>();
-
-/** Re-reads the CSS theme for every live terminal. */
-export function retheme(): void {
-  open.forEach((terminal) => (terminal.options.theme = theme()));
-}
+const DEFAULT_FONT = "ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace";
+let font = { family: DEFAULT_FONT, size: 13 };
 
 interface Surface {
   element: HTMLElement;
   terminal: Terminal;
+  /** Recomputes the grid for the element's size; a no-op while hidden. */
+  refit(): void;
   /** Called after each layout change with the new dimensions. */
   onFit(listener: (cols: number, rows: number) => void): void;
   dispose(): void;
 }
 
+const open = new Set<Surface>();
+
+/** Re-reads the CSS theme for every live terminal. */
+export function retheme(): void {
+  open.forEach(({ terminal }) => (terminal.options.theme = theme()));
+}
+
+/** Sets the font of every terminal, live and future. An empty family means the default. */
+export function setFont(family: string, size: number): void {
+  // The default stays as the fallback so a misspelled font still renders monospaced.
+  font = { family: family.trim() ? `${family}, ${DEFAULT_FONT}` : DEFAULT_FONT, size };
+  open.forEach(({ terminal, refit }) => {
+    terminal.options.fontFamily = font.family;
+    terminal.options.fontSize = font.size;
+    refit();
+  });
+}
+
 function surface(options: { readOnly: boolean }): Surface {
   const element = h("div", { class: "term-host" });
   const terminal = new Terminal({
-    fontFamily: "ui-monospace, 'Cascadia Mono', Menlo, Consolas, monospace",
-    fontSize: 13,
+    fontFamily: font.family,
+    fontSize: font.size,
     disableStdin: options.readOnly,
     cursorBlink: !options.readOnly,
     theme: theme(),
@@ -45,27 +61,30 @@ function surface(options: { readOnly: boolean }): Surface {
   const fit = new FitAddon();
   terminal.loadAddon(fit);
   terminal.open(element);
-  open.add(terminal);
 
   let fitted: ((cols: number, rows: number) => void) | undefined;
-  const observer = new ResizeObserver(() => {
+  const refit = () => {
     // A hidden tab has no size; fitting then would collapse the grid.
     if (element.clientWidth === 0 || element.clientHeight === 0) return;
     fit.fit();
     fitted?.(terminal.cols, terminal.rows);
-  });
+  };
+  const observer = new ResizeObserver(refit);
   observer.observe(element);
 
-  return {
+  const self: Surface = {
     element,
     terminal,
+    refit,
     onFit: (listener) => (fitted = listener),
     dispose: () => {
       observer.disconnect();
-      open.delete(terminal);
+      open.delete(self);
       terminal.dispose();
     },
   };
+  open.add(self);
+  return self;
 }
 
 export function createOutput(): { element: HTMLElement; write(data: string): void } {

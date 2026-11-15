@@ -1,41 +1,24 @@
 //! End-to-end: the host drives the Bun sample plugin over JSON-RPC.
 //! Needs `bun` on PATH and `bun install` to have been run at the repo root.
 
-use std::path::Path;
-use std::time::Duration;
+mod common;
 
+use common::{expect, on_path, sample};
 use serde_json::{json, Value};
 use skele_core::config::Scope;
 use skele_core::menus::MenuNode;
 use skele_core::plugin::PluginState;
 use skele_core::{Error, HostEvent, Workbench, WorkbenchOptions};
-use tokio::sync::broadcast::Receiver;
 
 const PLUGIN: &str = "sample.hello";
 
-fn state(workbench: &Workbench) -> PluginState {
-    workbench.plugins().iter().find(|p| p.id == PLUGIN).unwrap().state
-}
-
-/// Waits for an event matching `pick`, failing the test if none arrives.
-async fn expect<T>(events: &mut Receiver<HostEvent>, mut pick: impl FnMut(&HostEvent) -> Option<T>) -> T {
-    let wait = async {
-        loop {
-            if let Some(found) = pick(&events.recv().await.expect("event bus closed")) {
-                return found;
-            }
-        }
-    };
-    tokio::time::timeout(Duration::from_secs(10), wait).await.expect("timed out waiting for event")
-}
-
 #[tokio::test]
 async fn host_and_sample_plugin_round_trip() {
-    if std::process::Command::new("bun").arg("--version").output().is_err() {
+    if !on_path("bun") {
         eprintln!("skipping: bun is not installed");
         return;
     }
-    let plugin_dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../plugins/sample-bun");
+    let plugin_dir = sample("sample-bun");
     let dir = tempfile::tempdir().unwrap();
     let workbench = Workbench::new(WorkbenchOptions {
         user_settings: Some(dir.path().join("settings.json")),
@@ -46,7 +29,7 @@ async fn host_and_sample_plugin_round_trip() {
 
     // Installing registers contributions without starting the process.
     assert_eq!(workbench.install_plugin(&plugin_dir).unwrap(), PLUGIN);
-    assert_eq!(state(&workbench), PluginState::Idle);
+    assert_eq!(common::state(&workbench, PLUGIN), PluginState::Idle);
     assert!(workbench.commands().get("hello.greet").is_some());
     let tools = workbench.menubar().into_iter().find(|m| m.title == "Tools").unwrap();
     assert_eq!(
@@ -59,7 +42,7 @@ async fn host_and_sample_plugin_round_trip() {
     // First use starts the sidecar; the command reads config back through the host.
     let reply = workbench.execute_command("hello.greet", vec![]).await.unwrap();
     assert_eq!(reply, json!("Hello, World!"));
-    assert_eq!(state(&workbench), PluginState::Running);
+    assert_eq!(common::state(&workbench, PLUGIN), PluginState::Running);
     let message = expect(&mut events, |e| match e {
         HostEvent::Message { message, source, .. } => Some((message.clone(), source.clone())),
         _ => None,
@@ -105,9 +88,9 @@ async fn host_and_sample_plugin_round_trip() {
 
     // Shutdown stops the process; the next use starts a fresh one.
     workbench.shutdown().await;
-    assert_eq!(state(&workbench), PluginState::Stopped);
+    assert_eq!(common::state(&workbench, PLUGIN), PluginState::Stopped);
     workbench.execute_command("hello.greet", vec![]).await.unwrap();
-    assert_eq!(state(&workbench), PluginState::Running);
+    assert_eq!(common::state(&workbench, PLUGIN), PluginState::Running);
     let history = workbench.view_children("hello.greetings", Some("history".into())).await.unwrap();
     assert_eq!(history.len(), 2);
     workbench.shutdown().await;

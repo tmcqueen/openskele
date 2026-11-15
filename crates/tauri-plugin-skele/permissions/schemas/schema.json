@@ -295,6 +295,18 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the chrome command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-chrome",
+          "markdownDescription": "Enables the chrome command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the chrome command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-chrome",
+          "markdownDescription": "Denies the chrome command without any pre-configured scope."
+        },
+        {
           "description": "Enables the config_sections command without any pre-configured scope.",
           "type": "string",
           "const": "allow-config-sections",
@@ -451,10 +463,58 @@
           "markdownDescription": "Denies the view_children command without any pre-configured scope."
         },
         {
-          "description": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-open`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`",
+          "description": "Enables the window_close command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-window-close",
+          "markdownDescription": "Enables the window_close command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_close command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-window-close",
+          "markdownDescription": "Denies the window_close command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the window_minimize command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-window-minimize",
+          "markdownDescription": "Enables the window_minimize command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_minimize command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-window-minimize",
+          "markdownDescription": "Denies the window_minimize command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the window_start_drag command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-window-start-drag",
+          "markdownDescription": "Enables the window_start_drag command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_start_drag command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-window-start-drag",
+          "markdownDescription": "Denies the window_start_drag command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the window_toggle_maximize command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-window-toggle-maximize",
+          "markdownDescription": "Enables the window_toggle_maximize command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the window_toggle_maximize command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-window-toggle-maximize",
+          "markdownDescription": "Denies the window_toggle_maximize command without any pre-configured scope."
+        },
+        {
+          "description": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-open`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`\n- `allow-chrome`\n- `allow-window-start-drag`\n- `allow-window-minimize`\n- `allow-window-toggle-maximize`\n- `allow-window-close`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-open`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`"
+          "markdownDescription": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-open`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`\n- `allow-chrome`\n- `allow-window-start-drag`\n- `allow-window-minimize`\n- `allow-window-toggle-maximize`\n- `allow-window-close`"
         }
       ]
     }

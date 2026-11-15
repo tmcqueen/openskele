@@ -3,6 +3,7 @@
 //! [`skele_core::Workbench`], and state changes flow back over a
 //! [`tauri::ipc::Channel`].
 
+mod chrome;
 mod commands;
 mod menu;
 
@@ -11,7 +12,10 @@ use std::path::PathBuf;
 use skele_core::plugin::ON_STARTUP;
 use skele_core::{HostEvent, Workbench, WorkbenchOptions};
 use tauri::plugin::TauriPlugin;
-use tauri::{Manager, RunEvent, Wry};
+use tauri::{Manager, RunEvent, WebviewWindowBuilder, Wry};
+use tokio::sync::broadcast::error::RecvError;
+
+use crate::chrome::Chrome;
 
 pub use skele_core as core;
 
@@ -38,6 +42,11 @@ pub fn specta_builder() -> tauri_specta::Builder<Wry> {
             commands::document_open,
             commands::document_set_text,
             commands::document_save,
+            commands::chrome,
+            commands::window_start_drag,
+            commands::window_minimize,
+            commands::window_toggle_maximize,
+            commands::window_close,
         ])
         // `serde_json::Value` carries 64-bit integers, which Specta refuses to
         // type by default. They cross the IPC boundary as JSON numbers anyway.
@@ -68,6 +77,10 @@ impl Builder {
         self
     }
 
+    /// Builds the plugin. It creates every window that `tauri.conf.json`
+    /// declares with `"create": false`, framed according to the
+    /// `window.titleBarStyle` setting; windows Tauri creates itself keep the
+    /// system frame.
     pub fn build(self) -> TauriPlugin<Wry> {
         let Self { mut plugin_dirs, workspace } = self;
         let specta = specta_builder();
@@ -86,17 +99,38 @@ impl Builder {
                 app.manage(workbench.clone());
                 app.manage(commands::Sessions::default());
 
-                menu::install(app, &workbench)?;
+                chrome::register_setting(&workbench)?;
+                let chrome = Chrome::from_settings(&workbench);
+                app.manage(chrome);
 
-                // Contributions can change after startup; keep the native menu in step.
-                let (handle, events_of) = (app.clone(), workbench.clone());
+                if chrome.native_menu() {
+                    menu::install(app, &workbench)?;
+
+                    // Contributions can change after startup; keep the native menu in step.
+                    let (handle, events_of) = (app.clone(), workbench.clone());
+                    tauri::async_runtime::spawn(async move {
+                        let mut events = events_of.bus().subscribe();
+                        loop {
+                            match events.recv().await {
+                                Ok(HostEvent::ContributionsChanged) => menu::refresh(&handle, &events_of),
+                                Ok(_) | Err(RecvError::Lagged(_)) => {}
+                                Err(RecvError::Closed) => break,
+                            }
+                        }
+                    });
+                }
+
+                // Windows marked `"create": false` in tauri.conf.json are ours to
+                // create, so the title bar style can be part of their creation.
+                // Tauri holds its plugin lock while this hook runs and needs it
+                // again to create a window, so creation happens from a task.
+                let handle = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    let mut events = events_of.bus().subscribe();
-                    loop {
-                        match events.recv().await {
-                            Ok(HostEvent::ContributionsChanged) => menu::refresh(&handle, &events_of),
-                            Ok(_) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-                            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    for config in handle.config().app.windows.iter().filter(|window| !window.create) {
+                        let created = WebviewWindowBuilder::from_config(&handle, config)
+                            .and_then(|builder| chrome.frame(builder).build());
+                        if let Err(e) = created {
+                            eprintln!("could not create window {}: {e}", config.label);
                         }
                     }
                 });

@@ -12,6 +12,11 @@ const COMMANDS: &[&str] = &[
     "document_open",
     "document_set_text",
     "document_save",
+    "chrome",
+    "window_start_drag",
+    "window_minimize",
+    "window_toggle_maximize",
+    "window_close",
 ];
 
 fn main() {

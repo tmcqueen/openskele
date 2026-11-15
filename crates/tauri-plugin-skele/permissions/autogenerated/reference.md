@@ -17,6 +17,11 @@ Lets a webview render the workbench and drive it through its commands.
 - `allow-document-open`
 - `allow-document-set-text`
 - `allow-document-save`
+- `allow-chrome`
+- `allow-window-start-drag`
+- `allow-window-minimize`
+- `allow-window-toggle-maximize`
+- `allow-window-close`
 
 ## Permission Table
 
@@ -26,6 +31,32 @@ Lets a webview render the workbench and drive it through its commands.
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`skele:allow-chrome`
+
+</td>
+<td>
+
+Enables the chrome command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-chrome`
+
+</td>
+<td>
+
+Denies the chrome command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>
@@ -361,6 +392,110 @@ Enables the view_children command without any pre-configured scope.
 <td>
 
 Denies the view_children command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-window-close`
+
+</td>
+<td>
+
+Enables the window_close command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-window-close`
+
+</td>
+<td>
+
+Denies the window_close command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-window-minimize`
+
+</td>
+<td>
+
+Enables the window_minimize command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-window-minimize`
+
+</td>
+<td>
+
+Denies the window_minimize command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-window-start-drag`
+
+</td>
+<td>
+
+Enables the window_start_drag command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-window-start-drag`
+
+</td>
+<td>
+
+Denies the window_start_drag command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-window-toggle-maximize`
+
+</td>
+<td>
+
+Enables the window_toggle_maximize command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-window-toggle-maximize`
+
+</td>
+<td>
+
+Denies the window_toggle_maximize command without any pre-configured scope.
 
 </td>
 </tr>

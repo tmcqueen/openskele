@@ -27,6 +27,8 @@ export function createSettings(hasWorkspace: () => boolean): SettingsPane {
 
   async function reload(): Promise<void> {
     const sections = await commands.configSections();
+    // Rebuilding the form would drop keyboard focus mid-edit, so put it back.
+    const focused = element.contains(document.activeElement) ? document.activeElement?.id : undefined;
 
     tabs.replaceChildren(
       ...(["user", "workspace"] as const).map((candidate) => {
@@ -61,6 +63,7 @@ export function createSettings(hasWorkspace: () => boolean): SettingsPane {
         }),
       ]),
     );
+    if (focused) document.getElementById(focused)?.focus();
   }
 
   return { element, reload };

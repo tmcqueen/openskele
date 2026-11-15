@@ -7,9 +7,10 @@ import { h } from "./dom";
 import { commands, connect, onHostEvent, run, type PluginState, type Snapshot } from "./host";
 import { chordOf, normalizeChord } from "./keys";
 import { closePalette, togglePalette } from "./palette";
-import { createOutput, createPtyTerminal, retheme as rethemeTerminals } from "./renderers/terminal";
+import { createOutput, createPtyTerminal, retheme as rethemeTerminals, setFont } from "./renderers/terminal";
 import { createTree, type Tree } from "./renderers/tree";
 import { createSettings, type SettingsPane } from "./settings";
+import { createTitleBar, type TitleBar } from "./titlebar";
 import { toast } from "./toast";
 import "./styles.css";
 
@@ -22,6 +23,7 @@ let snapshot: Snapshot;
 let theme = "dark";
 let dock: DockviewApi;
 let settings: SettingsPane | undefined;
+let titleBar: TitleBar | undefined;
 let terminals = 0;
 const trees = new Map<string, Tree>();
 const pluginStates = new Map<string, PluginState>();
@@ -163,19 +165,31 @@ function applyTheme(next: string): void {
   editorModule?.retheme(theme);
 }
 
-async function loadTheme(): Promise<void> {
+/** Settings the shell itself renders from, rather than passing through to a form. */
+const APPEARANCE = ["workbench.colorTheme", "terminal.fontFamily", "terminal.fontSize"];
+
+async function loadAppearance(): Promise<void> {
   const sections = await commands.configSections();
-  const property = sections.flatMap((section) => section.properties).find((p) => p.key === "workbench.colorTheme");
-  applyTheme(String(property?.effective));
+  const properties = sections.flatMap((section) => section.properties);
+  const [colorTheme, fontFamily, fontSize] = APPEARANCE.map((key) => properties.find((p) => p.key === key)?.effective);
+  applyTheme(String(colorTheme));
+  setFont(String(fontFamily ?? ""), Number(fontSize) || 13);
 }
 
 async function loadSnapshot(): Promise<void> {
   snapshot = await commands.snapshot();
+  titleBar?.setMenus(snapshot.menubar);
   syncViews();
   renderStatus();
 }
 
 async function start(): Promise<void> {
+  const chrome = await commands.chrome();
+  if (chrome.titleBar === "custom") {
+    titleBar = createTitleBar(chrome, (command) => void run(command));
+    document.getElementById("titlebar")!.replaceWith(titleBar.element);
+  }
+
   dock = createDockview(document.getElementById("dock")!, { createComponent, theme: themeDark });
   dock.addPanel({ id: OUTPUT, component: OUTPUT, title: "Output" });
 
@@ -195,7 +209,7 @@ async function start(): Promise<void> {
         break;
       case "configChanged":
         void settings?.reload();
-        if (event.keys.includes("workbench.colorTheme")) void loadTheme();
+        if (event.keys.some((key) => APPEARANCE.includes(key))) void loadAppearance();
         break;
       case "openPanel":
         void openPanel(event.panel, event.arg ?? null);
@@ -208,7 +222,7 @@ async function start(): Promise<void> {
   });
   await connect();
   await loadSnapshot();
-  await loadTheme();
+  await loadAppearance();
   await openPanel("settings", null);
   dock.getPanel(OUTPUT)?.api.setSize({ height: 220 });
 
