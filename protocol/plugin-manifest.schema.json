@@ -1,6 +1,41 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
+    "AgentContribution": {
+      "description": "An agent the workbench can talk to: any executable speaking the Agent Client\nProtocol over stdio. Relative commands resolve against the manifest's directory.",
+      "properties": {
+        "args": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "command": {
+          "type": "string"
+        },
+        "env": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {},
+          "type": "object"
+        },
+        "id": {
+          "description": "Unique among all agents.",
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "command"
+      ],
+      "type": "object"
+    },
     "BarId": {
       "description": "Which app bar a view container sits on.",
       "enum": [
@@ -51,6 +86,14 @@
     },
     "Contributes": {
       "properties": {
+        "agents": {
+          "default": [],
+          "description": "Agents for the agent pane.",
+          "items": {
+            "$ref": "#/definitions/AgentContribution"
+          },
+          "type": "array"
+        },
         "commands": {
           "default": [],
           "items": {
@@ -296,6 +339,7 @@
         }
       ],
       "default": {
+        "agents": [],
         "commands": [],
         "keybindings": [],
         "menus": {},
@@ -309,12 +353,15 @@
       "type": "string"
     },
     "main": {
-      "allOf": [
+      "anyOf": [
         {
           "$ref": "#/definitions/Entry"
+        },
+        {
+          "type": "null"
         }
       ],
-      "description": "How to start the sidecar. Relative paths resolve against the manifest's directory."
+      "description": "How to start the sidecar. Relative paths resolve against the manifest's\ndirectory. Optional for plugins that only contribute agents or containers."
     },
     "name": {
       "type": "string"
@@ -331,8 +378,7 @@
     "id",
     "name",
     "version",
-    "protocol",
-    "main"
+    "protocol"
   ],
   "title": "Manifest",
   "type": "object"

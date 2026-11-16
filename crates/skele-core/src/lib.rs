@@ -5,6 +5,7 @@
 //! the sidecar plugin host, PTY terminals and document buffers. A front end
 //! (the Tauri plugin, a test, a CLI) drives it through [`Workbench`].
 
+pub mod agent;
 pub mod commands;
 pub mod config;
 pub mod containers;

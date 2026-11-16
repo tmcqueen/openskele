@@ -48,6 +48,22 @@ mod tests {
     }
 
     #[test]
+    fn manifest_parses_agents_without_main() {
+        let m: manifest::Manifest = serde_json::from_value(serde_json::json!({
+            "id": "a.agents", "name": "Agents", "version": "0", "protocol": "0.2",
+            "contributes": { "agents": [
+                { "id": "scripted", "name": "Scripted", "command": "bun", "args": ["run", "src/main.ts"], "env": { "A": "1" } }
+            ] }
+        }))
+        .unwrap();
+        assert!(m.main.is_none());
+        let agent = &m.contributes.agents[0];
+        assert_eq!((agent.id.as_str(), agent.name.as_str(), agent.command.as_str()), ("scripted", "Scripted", "bun"));
+        assert_eq!(agent.args, ["run", "src/main.ts"]);
+        assert_eq!(agent.env["A"], "1");
+    }
+
+    #[test]
     fn manifest_parses_tools() {
         let m: manifest::Manifest = serde_json::from_value(serde_json::json!({
             "id": "a.b", "name": "B", "version": "0", "protocol": "0.2",

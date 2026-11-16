@@ -24,6 +24,10 @@ pub enum Error {
     DuplicateTool(String),
     #[error("invalid tool name {0:?}: use lowercase letters, digits and _, starting with a letter")]
     InvalidToolName(String),
+    #[error("agent already registered: {0}")]
+    DuplicateAgent(String),
+    #[error("unknown agent: {0}")]
+    UnknownAgent(String),
     #[error("unknown plugin: {0}")]
     UnknownPlugin(String),
     #[error("unknown setting: {0}")]

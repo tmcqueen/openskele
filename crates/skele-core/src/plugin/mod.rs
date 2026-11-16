@@ -23,6 +23,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 
 use self::peer::{BoxFuture, Handler, Peer};
+use crate::agent::{AgentEntry, AgentInfo};
 use crate::commands::{CommandInfo, CommandTarget};
 use crate::containers::{ContainerInfo, VIEWS_CONTAINER};
 use crate::events::HostEvent;
@@ -132,7 +133,11 @@ impl Workbench {
             return Err(plugin_error(&id, "already installed"));
         }
 
-        if let Err(e) = self.register_contributions(&manifest) {
+        let c = &manifest.contributes;
+        if manifest.main.is_none() && !(c.commands.is_empty() && c.views.is_empty() && c.tools.is_empty()) {
+            return Err(plugin_error(&id, "contributes commands, views or tools but has no main"));
+        }
+        if let Err(e) = self.register_contributions(&manifest, dir) {
             self.unregister_contributions(&id);
             return Err(e);
         }
@@ -144,7 +149,7 @@ impl Workbench {
         Ok(id)
     }
 
-    fn register_contributions(&self, manifest: &Manifest) -> Result<()> {
+    fn register_contributions(&self, manifest: &Manifest, dir: &Path) -> Result<()> {
         let inner = &self.inner;
         let id = &manifest.id;
         let contributes = &manifest.contributes;
@@ -179,6 +184,13 @@ impl Workbench {
                 command: binding.command.clone(),
                 source: Some(id.clone()),
             });
+        }
+        for agent in &contributes.agents {
+            inner.agents.register(AgentEntry {
+                info: AgentInfo { id: agent.id.clone(), name: agent.name.clone(), source: id.clone() },
+                contribution: agent.clone(),
+                dir: dir.to_owned(),
+            })?;
         }
         for tool in &contributes.tools {
             let info = ToolInfo {
@@ -228,6 +240,7 @@ impl Workbench {
         inner.views.remove_source(id);
         inner.containers.remove_source(id);
         inner.tools.remove_source(id);
+        inner.agents.remove_source(id);
         self.fix_layout_containers();
     }
 
@@ -289,7 +302,7 @@ impl Workbench {
     async fn start(&self, plugin: &Arc<Plugin>) -> Result<Session> {
         let manifest = &plugin.manifest;
         let id = &manifest.id;
-        let entry = &manifest.main;
+        let entry = manifest.main.as_ref().ok_or_else(|| plugin_error(id, "has no main to start"))?;
 
         // A bare name is looked up on PATH; anything with a separator is relative to the plugin.
         let program = if Path::new(&entry.command).components().count() > 1 {
