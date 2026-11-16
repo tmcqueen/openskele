@@ -90,3 +90,28 @@ async fn host_and_dotnet_plugin_round_trip() {
     workbench.shutdown().await;
     assert_eq!(state(&workbench, PLUGIN), PluginState::Stopped);
 }
+
+#[tokio::test]
+async fn dotnet_tool_round_trip() {
+    if !on_path("dotnet") {
+        eprintln!("skipping: dotnet is not installed");
+        return;
+    }
+    let plugin_dir = sample("sample-dotnet");
+    let build = std::process::Command::new("dotnet")
+        .args(["build", "-c", "Release", "-nologo", "-v", "quiet"])
+        .current_dir(&plugin_dir)
+        .output()
+        .unwrap();
+    assert!(build.status.success(), "dotnet build failed:\n{}", String::from_utf8_lossy(&build.stdout));
+
+    let workbench = Workbench::new(WorkbenchOptions::default()).unwrap();
+    workbench.install_plugin(&plugin_dir).unwrap();
+    let info = workbench.tools().get("dotnet_runtime_info").unwrap().0;
+    assert!(info.read_only);
+    let grant = workbench.grants().issue(skele_core::grants::GrantKind::AgentSession { session_id: "s".into() }, "t");
+    let result = workbench.call_tool("dotnet_runtime_info", json!({}), &grant).await.unwrap();
+    assert!(!result.is_error, "{:?}", result.content);
+    assert!(result.content[0].text.starts_with(".NET"), "{:?}", result.content);
+    workbench.shutdown().await;
+}

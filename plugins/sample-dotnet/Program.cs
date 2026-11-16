@@ -31,6 +31,9 @@ internal sealed class RuntimeInfoPlugin : IPlugin, ITreeDataProvider
             return JsonValue.Create(message);
         });
 
+        host.Tools.Register("dotnet_runtime_info", _ =>
+            Task.FromResult(ToolResults.Text(RuntimeInformation.FrameworkDescription)));
+
         host.Views.RegisterTreeDataProvider(View, this);
         host.Config.Changed += _ => host.Views.Refresh(View);
         host.Documents.Saved += saved => host.Terminal.Write($"saved {saved.Uri}\r\n");

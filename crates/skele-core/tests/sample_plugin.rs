@@ -107,3 +107,53 @@ async fn host_and_sample_plugin_round_trip() {
     assert_eq!(history.len(), 2);
     workbench.shutdown().await;
 }
+
+fn agent_grant(workbench: &Workbench) -> skele_core::grants::Grant {
+    workbench.grants().issue(skele_core::grants::GrantKind::AgentSession { session_id: "s".into() }, "test")
+}
+
+#[tokio::test]
+async fn bun_tool_round_trip() {
+    if !on_path("bun") {
+        eprintln!("skipping: bun is not installed");
+        return;
+    }
+    let workbench = Workbench::new(WorkbenchOptions::default()).unwrap();
+    workbench.install_plugin(&sample("sample-bun")).unwrap();
+    let grant = agent_grant(&workbench);
+    let result = workbench.call_tool("hello_greet", json!({ "name": "Ferris" }), &grant).await.unwrap();
+    assert!(!result.is_error, "{:?}", result.content);
+    assert_eq!(result.content[0].text, "Hello, Ferris!");
+    workbench.shutdown().await;
+}
+
+#[tokio::test]
+async fn bun_unhandled_tool_is_tool_error() {
+    if !on_path("bun") {
+        eprintln!("skipping: bun is not installed");
+        return;
+    }
+    // A copy of the sample whose manifest declares a tool the code never registers.
+    let tmp = tempfile::tempdir().unwrap();
+    let copy = tmp.path().join("sample-bun");
+    std::fs::create_dir(&copy).unwrap();
+    for entry in ["src", "package.json"] {
+        std::os::unix::fs::symlink(sample("sample-bun").join(entry), copy.join(entry)).unwrap();
+    }
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(sample("sample-bun").join("skele-plugin.json")).unwrap()).unwrap();
+    manifest["contributes"]["tools"].as_array_mut().unwrap().push(
+        json!({ "name": "hello_unhandled", "description": "Never registered", "inputSchema": { "type": "object" } }),
+    );
+    std::fs::write(copy.join("skele-plugin.json"), manifest.to_string()).unwrap();
+
+    let workbench = Workbench::new(WorkbenchOptions::default()).unwrap();
+    workbench.install_plugin(&copy).unwrap();
+    let grant = agent_grant(&workbench);
+    let result = workbench.call_tool("hello_unhandled", json!({}), &grant).await.unwrap();
+    assert!(result.is_error);
+    assert!(result.content[0].text.starts_with("Hello: "), "{:?}", result.content);
+    let after = workbench.call_tool("hello_greet", json!({}), &grant).await.unwrap();
+    assert!(!after.is_error, "{:?}", after.content);
+    workbench.shutdown().await;
+}

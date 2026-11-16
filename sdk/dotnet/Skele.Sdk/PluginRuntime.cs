@@ -20,11 +20,13 @@ public static class SkelePlugin
 }
 
 internal sealed class PluginRuntime(IPlugin plugin, Transport transport)
-    : IHost, ICommands, IViews, IWindow, ITerminal, IConfig, IDocuments
+    : IHost, ICommands, ITools, IViews, IWindow, ITerminal, IConfig, IDocuments
 {
     private static readonly ProtocolJsonContext Json = ProtocolJsonContext.Default;
+    private static readonly JsonElement EmptyObject = JsonDocument.Parse("{}").RootElement;
 
     private readonly ConcurrentDictionary<string, CommandHandler> _commands = new();
+    private readonly ConcurrentDictionary<string, ToolHandler> _tools = new();
     private readonly ConcurrentDictionary<string, ITreeDataProvider> _providers = new();
     private readonly ConcurrentDictionary<long, TaskCompletionSource<JsonElement>> _pending = new();
     private long _nextId;
@@ -32,6 +34,7 @@ internal sealed class PluginRuntime(IPlugin plugin, Transport transport)
     public string PluginId { get; private set; } = "";
     public string? WorkspaceFolder { get; private set; }
     public ICommands Commands => this;
+    public ITools Tools => this;
     public IViews Views => this;
     public IWindow Window => this;
     public ITerminal Terminal => this;
@@ -143,6 +146,26 @@ internal sealed class PluginRuntime(IPlugin plugin, Transport transport)
 
                 return await handler(request.Args ?? []);
             }
+            case Methods.Host.ToolCall:
+            {
+                var request = Read(parameters, Json.ToolCallParams);
+                if (!_tools.TryGetValue(request.Name, out var handler))
+                {
+                    throw new RpcException(RpcException.MethodNotFound, $"no handler registered for tool {request.Name}");
+                }
+
+                ToolCallResult result;
+                try
+                {
+                    result = await handler(request.Arguments ?? EmptyObject);
+                }
+                catch (Exception error)
+                {
+                    result = ToolResults.Error(error.Message);
+                }
+
+                return JsonSerializer.SerializeToNode(result, Json.ToolCallResult);
+            }
             case Methods.Host.ViewGetChildren:
             {
                 var request = Read(parameters, Json.ViewGetChildrenParams);
@@ -213,6 +236,8 @@ internal sealed class PluginRuntime(IPlugin plugin, Transport transport)
     // ---- plugin -> host ----------------------------------------------------
 
     void ICommands.Register(string id, CommandHandler handler) => _commands[id] = handler;
+
+    void ITools.Register(string name, ToolHandler handler) => _tools[name] = handler;
 
     void IViews.RegisterTreeDataProvider(string viewId, ITreeDataProvider provider) => _providers[viewId] = provider;
 

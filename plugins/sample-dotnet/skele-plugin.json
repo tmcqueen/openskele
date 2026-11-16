@@ -15,6 +15,15 @@
       { "id": "dotnet.container", "title": "Runtime", "icon": "server-environment", "bar": "secondary" }
     ],
     "views": [{ "id": "dotnet.runtime", "title": "Runtime", "kind": "tree", "container": "dotnet.container" }],
+    "tools": [
+      {
+        "name": "dotnet_runtime_info",
+        "title": "Runtime info",
+        "description": "Returns the .NET runtime the Runtime Info plugin runs on, such as \".NET 10.0.1\".",
+        "inputSchema": { "type": "object" },
+        "readOnly": true
+      }
+    ],
     "configuration": {
       "title": "Runtime Info",
       "properties": {
