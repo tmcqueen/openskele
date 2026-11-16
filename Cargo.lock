@@ -3306,6 +3306,7 @@ name = "skele-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "getrandom 0.4.3",
  "jsonschema",
  "portable-pty",
  "ropey",

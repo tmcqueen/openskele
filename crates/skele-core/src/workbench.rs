@@ -16,12 +16,14 @@ use crate::config::{ConfigStore, Scope};
 use crate::containers::{ContainerInfo, ContainerRegistry, VIEWS_CONTAINER};
 use crate::document::DocumentStore;
 use crate::events::{EventBus, HostEvent};
+use crate::grants::GrantStore;
 use crate::keybindings::{Keybinding, KeybindingRegistry};
 use crate::layout::{Layout, Panel, PRIMARY_POSITION, SECONDARY_POSITION};
 use crate::menus::{Menu, MenuEntry, MenuRegistry};
 use crate::output::{LogState, OutputStore, LOG_DIRECTORY, LOG_TO_FILE, WORKBENCH_CHANNEL};
 use crate::plugin::{PluginInfo, PluginManager};
 use crate::pty::TerminalManager;
+use crate::tools::ToolRegistry;
 use crate::views::{ViewInfo, ViewRegistry};
 use crate::{Error, Result};
 
@@ -64,6 +66,8 @@ pub(crate) struct Inner {
     pub(crate) terminals: TerminalManager,
     pub(crate) documents: DocumentStore,
     pub(crate) output: OutputStore,
+    pub(crate) tools: ToolRegistry,
+    pub(crate) grants: GrantStore,
     pub(crate) log: Mutex<LogState>,
     pub(crate) log_flag: Option<PathBuf>,
     pub(crate) workspace: Option<PathBuf>,
@@ -92,6 +96,8 @@ impl Workbench {
                 terminals: Default::default(),
                 documents: Default::default(),
                 output: Default::default(),
+                tools: Default::default(),
+                grants: Default::default(),
                 log: Default::default(),
                 // An empty directory (`SKELE_LOG_DIR=`) means no flag.
                 log_flag: options.log_dir.filter(|dir| !dir.as_os_str().is_empty()),
