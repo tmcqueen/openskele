@@ -115,7 +115,7 @@ fn install(workbench: &Workbench, dir: &std::path::Path, name: &str, contributes
     let dir = dir.join(name);
     std::fs::create_dir_all(&dir).unwrap();
     let manifest = json!({
-        "id": format!("test.{name}"), "name": name, "version": "0", "protocol": "0.1",
+        "id": format!("test.{name}"), "name": name, "version": "0", "protocol": "0.2",
         "main": { "command": "/bin/false" }, "contributes": contributes,
     });
     std::fs::write(dir.join("skele-plugin.json"), manifest.to_string()).unwrap();

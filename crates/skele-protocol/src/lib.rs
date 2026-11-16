@@ -14,7 +14,7 @@ pub mod view;
 
 /// Version of the plugin protocol. Host and plugin must agree on the major
 /// component (and on the minor one while the major is 0).
-pub const PROTOCOL_VERSION: &str = "0.1.0";
+pub const PROTOCOL_VERSION: &str = "0.2.0";
 
 /// Whether a plugin speaking `theirs` can talk to a host speaking `ours`.
 pub fn is_compatible(ours: &str, theirs: &str) -> bool {
@@ -40,9 +40,43 @@ mod tests {
         assert!(is_compatible("0.1.0", "0.1"));
         assert!(is_compatible("0.1.0", "0.1.7"));
         assert!(!is_compatible("0.1.0", "0.2.0"));
+        assert!(is_compatible(PROTOCOL_VERSION, "0.2"));
+        assert!(!is_compatible(PROTOCOL_VERSION, "0.1"));
         assert!(is_compatible("1.4.0", "1.0.0"));
         assert!(!is_compatible("1.4.0", "2.0.0"));
         assert!(!is_compatible("1.0.0", "nope"));
+    }
+
+    #[test]
+    fn manifest_parses_tools() {
+        let m: manifest::Manifest = serde_json::from_value(serde_json::json!({
+            "id": "a.b", "name": "B", "version": "0", "protocol": "0.2",
+            "main": { "command": "x" },
+            "contributes": { "tools": [
+                { "name": "b_look", "description": "Looks", "inputSchema": { "type": "object" }, "readOnly": true },
+                { "name": "b_do", "title": "Do it", "description": "Does", "inputSchema": { "type": "object" } }
+            ] }
+        }))
+        .unwrap();
+        let tools = &m.contributes.tools;
+        assert!(tools[0].read_only);
+        assert!(!tools[1].read_only);
+        assert_eq!(tools[1].title.as_deref(), Some("Do it"));
+        assert_eq!(tools[0].input_schema, serde_json::json!({ "type": "object" }));
+    }
+
+    #[test]
+    fn tool_call_result_round_trips() {
+        use methods::ToolCallResult;
+        let value = serde_json::to_value(ToolCallResult::text("hi")).unwrap();
+        assert_eq!(value, serde_json::json!({ "content": [{ "type": "text", "text": "hi" }], "isError": false }));
+        let error: ToolCallResult = serde_json::from_value(
+            serde_json::json!({ "content": [{ "type": "text", "text": "no" }], "isError": true }),
+        )
+        .unwrap();
+        assert!(error.is_error);
+        assert_eq!(error.content[0].text, "no");
+        assert!(ToolCallResult::error("x").is_error);
     }
 
     #[test]

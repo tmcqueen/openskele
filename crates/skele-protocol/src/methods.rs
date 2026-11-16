@@ -67,7 +67,10 @@ request!(
 );
 notification!(
     /// The plugin process should terminate.
-    Exit, "exit", HostToPlugin, Empty
+    Exit,
+    "exit",
+    HostToPlugin,
+    Empty
 );
 
 // ---- host -> plugin --------------------------------------------------------
@@ -77,27 +80,44 @@ request!(
     CommandExecute, "command/execute", HostToPlugin, CommandExecuteParams => Value
 );
 request!(
+    /// Run a tool the plugin contributed. Failures the agent should read are
+    /// a result with `isError`, not a JSON-RPC error.
+    ToolCall, "tool/call", HostToPlugin, ToolCallParams => ToolCallResult
+);
+request!(
     /// Fetch the rows of a contributed view, or the children of one row.
     ViewGetChildren, "view/getChildren", HostToPlugin, ViewGetChildrenParams => ViewGetChildrenResult
 );
 notification!(
     /// Effective configuration changed.
-    ConfigDidChange, "config/didChange", HostToPlugin, ConfigDidChangeParams
+    ConfigDidChange,
+    "config/didChange",
+    HostToPlugin,
+    ConfigDidChangeParams
 );
 notification!(
     /// A document buffer was written to disk.
-    DocumentDidSave, "document/didSave", HostToPlugin, DocumentDidSaveParams
+    DocumentDidSave,
+    "document/didSave",
+    HostToPlugin,
+    DocumentDidSaveParams
 );
 
 // ---- plugin -> host --------------------------------------------------------
 
 notification!(
     /// Show a transient message to the user.
-    WindowShowMessage, "window/showMessage", PluginToHost, ShowMessageParams
+    WindowShowMessage,
+    "window/showMessage",
+    PluginToHost,
+    ShowMessageParams
 );
 notification!(
     /// Append text to an output terminal.
-    TerminalWrite, "terminal/write", PluginToHost, TerminalWriteParams
+    TerminalWrite,
+    "terminal/write",
+    PluginToHost,
+    TerminalWriteParams
 );
 request!(
     /// Read the effective value of a setting.
@@ -105,7 +125,10 @@ request!(
 );
 notification!(
     /// Tell the host a view's data is stale so it re-queries.
-    ViewRefresh, "view/refresh", PluginToHost, ViewRefreshParams
+    ViewRefresh,
+    "view/refresh",
+    PluginToHost,
+    ViewRefreshParams
 );
 
 // ---- payloads --------------------------------------------------------------
@@ -145,6 +168,57 @@ pub struct CommandExecuteParams {
     pub command: String,
     #[serde(default)]
     pub args: Vec<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallParams {
+    pub name: String,
+    /// Arguments, already validated against the tool's `inputSchema`.
+    #[serde(default)]
+    pub arguments: Value,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum ToolContentType {
+    Text,
+}
+
+/// One piece of a tool's result. Only text for now; other kinds would add
+/// their own optional fields beside `type`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolContent {
+    #[serde(rename = "type")]
+    pub kind: ToolContentType,
+    pub text: String,
+}
+
+impl ToolContent {
+    pub fn text(text: impl Into<String>) -> Self {
+        Self { kind: ToolContentType::Text, text: text.into() }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolCallResult {
+    pub content: Vec<ToolContent>,
+    #[serde(default)]
+    pub is_error: bool,
+}
+
+impl ToolCallResult {
+    /// A successful result with one piece of text.
+    pub fn text(text: impl Into<String>) -> Self {
+        Self { content: vec![ToolContent::text(text)], is_error: false }
+    }
+
+    /// A failed result whose message the agent reads.
+    pub fn error(message: impl Into<String>) -> Self {
+        Self { content: vec![ToolContent::text(message)], is_error: true }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

@@ -3,7 +3,7 @@
   "id": "sample.hello",
   "name": "Hello",
   "version": "0.1.0",
-  "protocol": "0.1",
+  "protocol": "0.2",
   "main": { "command": "bun", "args": ["run", "src/main.ts"] },
   "activationEvents": [],
   "contributes": {

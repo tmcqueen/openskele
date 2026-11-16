@@ -74,6 +74,7 @@ pub fn openrpc() -> Value {
     doc.notification::<Exit>();
     doc.request::<CommandExecute>();
     doc.request::<ViewGetChildren>();
+    doc.request::<ToolCall>();
     doc.notification::<ConfigDidChange>();
     doc.notification::<DocumentDidSave>();
     doc.notification::<WindowShowMessage>();

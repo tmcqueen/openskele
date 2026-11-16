@@ -3,7 +3,7 @@
   "id": "sample.dotnet",
   "name": "Runtime Info",
   "version": "0.1.0",
-  "protocol": "0.1",
+  "protocol": "0.2",
   "main": { "command": "dotnet", "args": ["bin/Release/net10.0/SampleDotnet.dll"] },
   "activationEvents": [],
   "contributes": {

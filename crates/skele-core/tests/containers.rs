@@ -11,7 +11,7 @@ fn plugin(dir: &Path, name: &str, contributes: Value) -> std::path::PathBuf {
     let dir = dir.join(name);
     std::fs::create_dir_all(&dir).unwrap();
     let manifest = json!({
-        "id": format!("test.{name}"), "name": name, "version": "0.1.0", "protocol": "0.1",
+        "id": format!("test.{name}"), "name": name, "version": "0.1.0", "protocol": "0.2",
         "main": { "command": "/bin/false" },
         "contributes": contributes,
     });

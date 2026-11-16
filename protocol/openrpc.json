@@ -175,6 +175,61 @@
         ],
         "type": "object"
       },
+      "ToolCallParams": {
+        "properties": {
+          "arguments": {
+            "default": null,
+            "description": "Arguments, already validated against the tool's `inputSchema`."
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ToolCallResult": {
+        "properties": {
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/ToolContent"
+            },
+            "type": "array"
+          },
+          "isError": {
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "content"
+        ],
+        "type": "object"
+      },
+      "ToolContent": {
+        "description": "One piece of a tool's result. Only text for now; other kinds would add\ntheir own optional fields beside `type`.",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "$ref": "#/components/schemas/ToolContentType"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "type": "object"
+      },
+      "ToolContentType": {
+        "enum": [
+          "text"
+        ],
+        "type": "string"
+      },
       "TreeItem": {
         "description": "One row of a tree or list view.",
         "properties": {
@@ -275,7 +330,7 @@
   "info": {
     "description": "JSON-RPC 2.0 over stdio with Content-Length framing. `x-direction` says which side may send a method; methods without `result` are notifications.",
     "title": "openskele plugin protocol",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "methods": [
     {
@@ -417,6 +472,38 @@
       "x-kind": "request",
       "x-params": {
         "$ref": "#/components/schemas/ViewGetChildrenParams"
+      }
+    },
+    {
+      "name": "tool/call",
+      "paramStructure": "by-name",
+      "params": [
+        {
+          "name": "arguments",
+          "required": false,
+          "schema": {
+            "default": null,
+            "description": "Arguments, already validated against the tool's `inputSchema`."
+          }
+        },
+        {
+          "name": "name",
+          "required": true,
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "result": {
+        "name": "result",
+        "schema": {
+          "$ref": "#/components/schemas/ToolCallResult"
+        }
+      },
+      "x-direction": "hostToPlugin",
+      "x-kind": "request",
+      "x-params": {
+        "$ref": "#/components/schemas/ToolCallParams"
       }
     },
     {
