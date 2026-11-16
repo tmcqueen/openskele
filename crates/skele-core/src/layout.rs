@@ -261,6 +261,10 @@ impl Workbench {
         Ok(id)
     }
 
+    pub fn set_bar_visible(&self, bar: BarId, visible: bool) {
+        self.update_layout(|layout| layout.bar_mut(bar).visible = visible);
+    }
+
     pub fn toggle_bar(&self, bar: BarId) {
         self.update_layout(|layout| {
             let bar = layout.bar_mut(bar);

@@ -82,6 +82,11 @@ impl DocumentStore {
     }
 
     /// Writes the buffer to its file and returns the version that was saved.
+    /// The current text of an open document, unsaved edits included.
+    pub fn text(&self, uri: &str) -> Result<String> {
+        self.with(uri, |doc| Ok(doc.rope.to_string()))
+    }
+
     pub fn save(&self, uri: &str) -> Result<u32> {
         self.with(uri, |doc| {
             doc.rope.write_to(std::io::BufWriter::new(std::fs::File::create(&doc.path)?))?;

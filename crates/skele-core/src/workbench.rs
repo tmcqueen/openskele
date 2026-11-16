@@ -108,6 +108,7 @@ impl Workbench {
         workbench.register_builtins()?;
         workbench.apply_bar_settings();
         workbench.apply_log_settings();
+        crate::tools::builtin::register(&workbench)?;
         Ok(workbench)
     }
 

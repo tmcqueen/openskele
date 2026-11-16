@@ -1,6 +1,8 @@
 //! Tools an agent can call: built into the host, or contributed by plugins.
 //! Arguments are checked against each tool's schema before it runs.
 
+pub(crate) mod builtin;
+
 use std::collections::BTreeMap;
 use std::future::Future;
 use std::pin::Pin;
