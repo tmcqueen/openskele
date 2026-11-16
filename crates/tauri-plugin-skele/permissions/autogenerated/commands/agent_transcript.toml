@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-agent-transcript"
+description = "Enables the agent_transcript command without any pre-configured scope."
+commands.allow = ["agent_transcript"]
+
+[[permission]]
+identifier = "deny-agent-transcript"
+description = "Denies the agent_transcript command without any pre-configured scope."
+commands.deny = ["agent_transcript"]

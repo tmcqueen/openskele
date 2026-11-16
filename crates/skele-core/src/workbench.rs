@@ -13,7 +13,7 @@ use skele_protocol::view::TreeItem;
 
 use crate::commands::{CommandInfo, CommandRegistry, CommandTarget};
 use crate::config::{ConfigStore, Scope};
-use crate::containers::{ContainerInfo, ContainerRegistry, VIEWS_CONTAINER};
+use crate::containers::{ContainerInfo, ContainerRegistry, AGENT_CONTAINER, VIEWS_CONTAINER};
 use crate::document::DocumentStore;
 use crate::events::{EventBus, HostEvent};
 use crate::grants::GrantStore;
@@ -115,6 +115,8 @@ impl Workbench {
         workbench.apply_bar_settings();
         workbench.apply_log_settings();
         crate::tools::builtin::register(&workbench)?;
+        // Built-in containers with content of their own (the agent pane) can be chosen from the start.
+        workbench.fix_layout_containers();
         Ok(workbench)
     }
 
@@ -224,6 +226,16 @@ impl Workbench {
             bar: BarId::Primary,
             order: 0,
             source: None,
+            builtin_content: false,
+        })?;
+        self.register_container(ContainerInfo {
+            id: AGENT_CONTAINER.to_owned(),
+            title: "Agent".to_owned(),
+            icon: "sparkle".to_owned(),
+            bar: BarId::Secondary,
+            order: 0,
+            source: None,
+            builtin_content: true,
         })?;
 
         // Each built-in holds the workbench weakly so the registry does not keep it alive.

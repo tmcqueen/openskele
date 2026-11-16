@@ -13,6 +13,9 @@ use crate::{Error, Result, Workbench};
 /// The built-in container that holds views which name no container.
 pub const VIEWS_CONTAINER: &str = "workbench.views";
 
+/// The built-in container for the agent pane, on the secondary bar.
+pub const AGENT_CONTAINER: &str = "workbench.agent";
+
 /// Prefix of the per-container command that reveals it.
 pub const FOCUS_COMMAND_PREFIX: &str = "workbench.focusContainer.";
 
@@ -28,6 +31,9 @@ pub struct ContainerInfo {
     pub order: i32,
     /// Contributing plugin; `None` for built-ins.
     pub source: Option<String>,
+    /// The front end draws this container itself (the agent pane) instead of
+    /// listing views in it.
+    pub builtin_content: bool,
 }
 
 #[derive(Default)]
@@ -109,6 +115,7 @@ mod tests {
             bar,
             order,
             source: source.map(str::to_owned),
+            builtin_content: false,
         }
     }
 

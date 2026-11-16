@@ -213,6 +213,7 @@ impl Workbench {
                 bar: container.bar,
                 order: container.order,
                 source: Some(id.clone()),
+                builtin_content: false,
             })?;
         }
         for view in &contributes.views {
