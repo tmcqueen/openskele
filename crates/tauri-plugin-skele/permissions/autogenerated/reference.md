@@ -17,6 +17,9 @@ Lets a webview render the workbench and drive it through its commands.
 - `allow-document-open`
 - `allow-document-set-text`
 - `allow-document-save`
+- `allow-output-channels`
+- `allow-output-read`
+- `allow-output-clear`
 - `allow-layout-set-active-container`
 - `allow-layout-set-active-panel`
 - `allow-layout-close-panel`
@@ -291,6 +294,84 @@ Enables the layout_set_active_panel command without any pre-configured scope.
 <td>
 
 Denies the layout_set_active_panel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-output-channels`
+
+</td>
+<td>
+
+Enables the output_channels command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-output-channels`
+
+</td>
+<td>
+
+Denies the output_channels command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-output-clear`
+
+</td>
+<td>
+
+Enables the output_clear command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-output-clear`
+
+</td>
+<td>
+
+Denies the output_clear command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-output-read`
+
+</td>
+<td>
+
+Enables the output_read command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-output-read`
+
+</td>
+<td>
+
+Denies the output_read command without any pre-configured scope.
 
 </td>
 </tr>

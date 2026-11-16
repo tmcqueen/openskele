@@ -7,3 +7,4 @@ sdk/dotnet/**/bin/
 sdk/dotnet/**/obj/
 plugins/*/bin/
 plugins/*/obj/
+plan2.md

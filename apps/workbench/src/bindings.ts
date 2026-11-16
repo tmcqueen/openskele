@@ -27,6 +27,11 @@ export const commands = {
 	documentOpen: (path: string, options?: InvokeOptions) => __TAURI_INVOKE<DocumentSnapshot>("plugin:skele|document_open", { path }, options),
 	documentSetText: (uri: string, text: string, options?: InvokeOptions) => __TAURI_INVOKE<number>("plugin:skele|document_set_text", { uri, text }, options),
 	documentSave: (uri: string, options?: InvokeOptions) => __TAURI_INVOKE<number>("plugin:skele|document_save", { uri }, options),
+	/**  Output channel names, the Workbench channel first. */
+	outputChannels: (options?: InvokeOptions) => __TAURI_INVOKE<string[]>("plugin:skele|output_channels", undefined, options),
+	/**  The recent text of an output channel. */
+	outputRead: (channel: string, options?: InvokeOptions) => __TAURI_INVOKE<string>("plugin:skele|output_read", { channel }, options),
+	outputClear: (channel: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|output_clear", { channel }, options),
 	/**  Opens a container's side panel on a bar, or collapses it with `null`. */
 	layoutSetActiveContainer: (bar: BarId, id: string | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|layout_set_active_container", { bar, id }, options),
 	layoutSetActivePanel: (id: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|layout_set_active_panel", { id }, options),
@@ -180,8 +185,12 @@ export type HostEvent = HostEvent_Serialize | HostEvent_Deserialize;
 export type HostEvent_Deserialize = 
 /**  Commands, menus, keybindings, views or config schemas changed; re-fetch the snapshot. */
 { type: "contributionsChanged" } | { type: "message"; level: MessageLevel; message: string; source?: string | null } | 
-/**  Text for a named output terminal. */
-{ type: "terminalData"; terminal: string; data: string } | { type: "viewRefresh"; viewId: string } | { type: "configChanged"; keys: string[] } | 
+/**  Text was written to an output channel. */
+{ type: "outputAppended"; channel: string; text: string } | 
+/**  An output channel was created; re-list them. */
+{ type: "outputChannelsChanged" } | 
+/**  An output channel was emptied. */
+{ type: "outputCleared"; channel: string } | { type: "viewRefresh"; viewId: string } | { type: "configChanged"; keys: string[] } | 
 /**  The bars or open panels changed; this is the whole new layout. */
 { type: "layoutChanged"; layout: Layout_Deserialize } | 
 /**  Open the command palette overlay. */
@@ -190,8 +199,12 @@ export type HostEvent_Deserialize =
 export type HostEvent_Serialize = 
 /**  Commands, menus, keybindings, views or config schemas changed; re-fetch the snapshot. */
 { type: "contributionsChanged" } | { type: "message"; level: MessageLevel; message: string; source: string | null } | 
-/**  Text for a named output terminal. */
-{ type: "terminalData"; terminal: string; data: string } | { type: "viewRefresh"; viewId: string } | { type: "configChanged"; keys: string[] } | 
+/**  Text was written to an output channel. */
+{ type: "outputAppended"; channel: string; text: string } | 
+/**  An output channel was created; re-list them. */
+{ type: "outputChannelsChanged" } | 
+/**  An output channel was emptied. */
+{ type: "outputCleared"; channel: string } | { type: "viewRefresh"; viewId: string } | { type: "configChanged"; keys: string[] } | 
 /**  The bars or open panels changed; this is the whole new layout. */
 { type: "layoutChanged"; layout: Layout_Serialize } | 
 /**  Open the command palette overlay. */
