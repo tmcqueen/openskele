@@ -9,9 +9,9 @@ JSON-RPC 2.0 over stdio.
 | Path | What it is |
 | --- | --- |
 | `crates/skele-protocol` | Wire types: JSON-RPC envelope, protocol methods, plugin manifest, view models. Source of the schema documents. |
-| `crates/skele-core` | Headless core, no Tauri: command/menu/keybinding/view registries, config store, event bus, plugin host, PTY terminals (portable-pty), document buffers (ropey). |
+| `crates/skele-core` | Headless core, no Tauri: command/menu/keybinding/view/view-container registries, the layout (both app bars and the open panels), config store, event bus, plugin host, PTY terminals (portable-pty), document buffers (ropey). |
 | `crates/tauri-plugin-skele` | The core packaged as a Tauri plugin: typed commands (tauri-specta), `Channel` streaming, permissions, native menu built from the menu registry. |
-| `apps/workbench` | The app. `src-tauri` is a few lines of wiring; `src` is the generic renderer (Dockview layout; tree, list, form, xterm.js terminal, Monaco editor). |
+| `apps/workbench` | The app. `src-tauri` is a few lines of wiring; `src` is the generic renderer (Dockview layout with the app bars as edge groups; tree, list, form, xterm.js terminal, Monaco editor; codicons). |
 | `protocol/` | Generated `openrpc.json` and `plugin-manifest.schema.json`. |
 | `sdk/typescript` | Thin plugin SDK; its protocol types are generated from `protocol/openrpc.json`. |
 | `sdk/dotnet` | The same for .NET 10: generated C# records plus a small runtime, no package dependencies. |
@@ -73,6 +73,34 @@ bun run gen:bindings   # apps/workbench/src/bindings.ts, after changing IPC comm
 ```
 
 A test fails if `protocol/` is stale.
+
+## App bars and layout
+
+The window has a primary and a secondary app bar, VS Code style: a strip of
+icons, one per view container, and the side panel of the container that is
+open. Plugins add containers and place their views in them:
+
+```json
+"contributes": {
+  "viewContainers": [{ "id": "hello.container", "title": "Hello", "icon": "comment-discussion", "bar": "primary", "order": 0 }],
+  "views": [{ "id": "hello.greetings", "title": "Greetings", "container": "hello.container" }]
+}
+```
+
+`icon` is a [codicon](https://microsoft.github.io/vscode-codicons/dist/codicon.html)
+name, as are tree item icons. `bar` defaults to `primary`; a view without a
+`container` goes in the built-in `workbench.views` container. Each container
+gets a `workbench.focusContainer.<id>` command.
+
+`workbench.primaryBar.position` and `workbench.secondaryBar.position` (`left`,
+`right` or `top`; defaults left and right) dock the bars, live. `Mod+B` and
+`Mod+Alt+B` toggle them. If both are set to the same side, the secondary bar
+is drawn on the opposite one.
+
+The layout (bars and open panels) belongs to the core, not the webview: it is
+in the snapshot, every change arrives as a `layoutChanged` event, and clicks
+in the webview are requests to the core. Terminals run in the core too and
+keep their last 64 KiB of output, so a page reload re-attaches to them.
 
 ## Settings
 

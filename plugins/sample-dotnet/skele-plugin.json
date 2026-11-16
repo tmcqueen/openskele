@@ -11,7 +11,10 @@
     "menus": {
       "menubar/Tools": [{ "command": "dotnet.describe", "group": "2_dotnet", "order": 1 }]
     },
-    "views": [{ "id": "dotnet.runtime", "title": "Runtime", "kind": "tree", "location": "sidebar" }],
+    "viewContainers": [
+      { "id": "dotnet.container", "title": "Runtime", "icon": "server-environment", "bar": "secondary" }
+    ],
+    "views": [{ "id": "dotnet.runtime", "title": "Runtime", "kind": "tree", "container": "dotnet.container" }],
     "configuration": {
       "title": "Runtime Info",
       "properties": {

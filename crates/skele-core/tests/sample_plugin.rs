@@ -29,6 +29,10 @@ async fn host_and_sample_plugin_round_trip() {
 
     // Installing registers contributions without starting the process.
     assert_eq!(workbench.install_plugin(&plugin_dir).unwrap(), PLUGIN);
+    let container = workbench.containers().get("hello.container").expect("sample container");
+    assert_eq!(container.bar, skele_core::protocol::manifest::BarId::Primary);
+    assert_eq!(workbench.views().get("hello.greetings").unwrap().container, "hello.container");
+    assert_eq!(workbench.layout().primary.active_container.as_deref(), Some("hello.container"));
     assert_eq!(common::state(&workbench, PLUGIN), PluginState::Idle);
     assert!(workbench.commands().get("hello.greet").is_some());
     let tools = workbench.menubar().into_iter().find(|m| m.title == "Tools").unwrap();
