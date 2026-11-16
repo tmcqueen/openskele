@@ -12,6 +12,7 @@ pub mod document;
 pub mod error;
 pub mod events;
 pub mod keybindings;
+pub mod layout;
 pub mod menus;
 pub mod plugin;
 pub mod pty;
