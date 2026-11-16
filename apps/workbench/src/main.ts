@@ -104,9 +104,14 @@ function createComponent({ name }: { name: string }): IContentRenderer {
   }
 }
 
+/** Redraws bars and panels. Callers do not wait, so failures are shown here. */
 async function render(): Promise<void> {
-  bars.render(snapshot, layout);
-  await main.reconcile(layout);
+  try {
+    bars.render(snapshot, layout);
+    await main.reconcile(layout);
+  } catch (error) {
+    toast("error", `Could not update the layout: ${error}`);
+  }
 }
 
 function renderStatus(): void {
@@ -158,7 +163,6 @@ async function start(): Promise<void> {
     // The host's layout has no notion of dragged-around panels.
     disableDnd: true,
   });
-  dock.addPanel({ id: OUTPUT, component: OUTPUT, title: "Output" });
   bars = createBars(dock, (bar, id) => {
     commands.layoutSetActiveContainer(bar, id).catch((error) => toast("error", String(error)));
   });
@@ -198,8 +202,8 @@ async function start(): Promise<void> {
   await connect();
   await loadSnapshot();
   await loadAppearance();
-  // A reload keeps the host's panels; only a fresh start opens Settings.
-  if (!layout.panels.length) await run("workbench.openSettings");
+  // A reload keeps the host's panels; only a fresh start (just the output) opens Settings.
+  if (layout.panels.every((panel) => panel.kind === "output")) await run("workbench.openSettings");
   dock.getPanel(OUTPUT)?.api.setSize({ height: 220 });
 
   // Capture phase, so chords win over whatever widget has focus.

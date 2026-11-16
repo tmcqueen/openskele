@@ -45,15 +45,22 @@ pub struct Bar {
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum Panel {
+    /// The log of plugin output and host messages.
+    Output,
     Settings,
-    Editor { path: String },
-    Terminal { id: u32 },
+    Editor {
+        path: String,
+    },
+    Terminal {
+        id: u32,
+    },
 }
 
 impl Panel {
     /// Stable id: `settings`, `editor:<path>` or `terminal:<id>`.
     pub fn id(&self) -> String {
         match self {
+            Panel::Output => "output".to_owned(),
             Panel::Settings => "settings".to_owned(),
             Panel::Editor { path } => format!("editor:{path}"),
             Panel::Terminal { id } => format!("terminal:{id}"),
@@ -83,7 +90,8 @@ impl Default for Layout {
         Self {
             primary: bar(BarPosition::Left),
             secondary: bar(BarPosition::Right),
-            panels: Vec::new(),
+            // The output is open from the start; it can be closed and reopened like any panel.
+            panels: vec![Panel::Output],
             active_panel: None,
             chosen: [false; 2],
         }
@@ -294,13 +302,18 @@ mod tests {
         Panel::Editor { path: path.to_owned() }
     }
 
+    /// A layout with nothing open, so tests see only the panels they open.
+    fn empty() -> Layout {
+        Layout { panels: Vec::new(), ..Layout::default() }
+    }
+
     fn container(id: &str, bar: BarId, order: i32) -> ContainerInfo {
         ContainerInfo { id: id.into(), title: id.into(), icon: "x".into(), bar, order, source: None }
     }
 
     #[test]
     fn open_same_file_twice_keeps_one_panel() {
-        let mut layout = Layout::default();
+        let mut layout = empty();
         layout.open(editor("/a"));
         layout.open(editor("/a"));
         assert_eq!(layout.panels.len(), 1);
@@ -309,7 +322,7 @@ mod tests {
 
     #[test]
     fn open_activates() {
-        let mut layout = Layout::default();
+        let mut layout = empty();
         layout.open(Panel::Settings);
         layout.open(editor("/a"));
         assert_eq!(layout.active_panel.as_deref(), Some("editor:/a"));
@@ -320,7 +333,7 @@ mod tests {
 
     #[test]
     fn closing_active_activates_previous() {
-        let mut layout = Layout::default();
+        let mut layout = empty();
         layout.open(Panel::Settings);
         layout.open(editor("/e1"));
         layout.open(editor("/e2"));
@@ -335,7 +348,7 @@ mod tests {
 
     #[test]
     fn closing_inactive_keeps_active() {
-        let mut layout = Layout::default();
+        let mut layout = empty();
         layout.open(Panel::Settings);
         layout.open(editor("/a"));
         layout.close("settings");
@@ -345,7 +358,7 @@ mod tests {
 
     #[test]
     fn activate_unknown_is_false() {
-        let mut layout = Layout::default();
+        let mut layout = empty();
         assert!(!layout.activate("settings"));
         assert_eq!(layout.active_panel, None);
     }
@@ -401,6 +414,7 @@ mod tests {
     fn panel_ids() {
         assert_eq!(Panel::Terminal { id: 3 }.id(), "terminal:3");
         assert_eq!(Panel::Settings.id(), "settings");
+        assert_eq!(Panel::Output.id(), "output");
         assert_eq!(editor("/a").id(), "editor:/a");
     }
 
@@ -408,6 +422,11 @@ mod tests {
     fn panel_serializes_tagged() {
         let value = serde_json::to_value(editor("/a")).unwrap();
         assert_eq!(value, serde_json::json!({ "kind": "editor", "path": "/a" }));
+    }
+
+    #[test]
+    fn output_is_open_by_default() {
+        assert_eq!(Layout::default().panels, vec![Panel::Output]);
     }
 
     #[test]

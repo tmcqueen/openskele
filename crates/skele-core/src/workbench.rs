@@ -208,13 +208,17 @@ impl Workbench {
             }))
         };
         type Run = fn(&Workbench, Vec<Value>) -> Result<Value>;
-        let menu_builtins: [(&str, &str, &str, &str, Run); 5] = [
+        let menu_builtins: [(&str, &str, &str, &str, Run); 6] = [
             ("workbench.showCommands", "Show All Commands", "menubar/View", "Mod+Shift+P", |w, _| {
                 w.inner.bus.emit(HostEvent::ShowCommandPalette);
                 Ok(Value::Null)
             }),
             ("workbench.openSettings", "Open Settings", "menubar/File", "Mod+,", |w, _| {
                 w.open_panel(Panel::Settings);
+                Ok(Value::Null)
+            }),
+            ("workbench.showOutput", "Show Output", "menubar/View", "Mod+Shift+U", |w, _| {
+                w.open_panel(Panel::Output);
                 Ok(Value::Null)
             }),
             ("workbench.newTerminal", "New Terminal", "menubar/View", "Mod+Shift+T", |w, _| {

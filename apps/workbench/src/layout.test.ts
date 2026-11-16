@@ -28,7 +28,6 @@ function setup() {
   const dock = createDockview(element, {
     createComponent: () => ({ element: document.createElement("div"), init: () => {} }),
   });
-  dock.addPanel({ id: OUTPUT, component: OUTPUT, title: "Output" });
   return { dock, main: createMainArea(dock) };
 }
 
@@ -36,7 +35,7 @@ const bar = { position: "left", visible: true, activeContainer: null } as const;
 const layout = (paths: string[], active: string | null): Layout => ({
   primary: bar,
   secondary: { ...bar, position: "right" },
-  panels: [{ kind: "settings" }, ...paths.map((path) => ({ kind: "editor" as const, path }))],
+  panels: [{ kind: "output" }, { kind: "settings" }, ...paths.map((path) => ({ kind: "editor" as const, path }))],
   activePanel: active,
 });
 
@@ -71,4 +70,57 @@ test("a user activating a tab is sent to the host", async () => {
   dock.getPanel("settings")!.api.setActive();
   await Promise.resolve();
   expect(calls).toEqual(["activate settings"]);
+});
+
+/** Output closed: settings plus terminals. */
+const withTerminals = (ids: number[], active: string | null): Layout => ({
+  ...layout([], active),
+  panels: [{ kind: "settings" }, ...ids.map((id) => ({ kind: "terminal" as const, id }))],
+});
+
+const without = (l: Layout, kind: string): Layout => ({ ...l, panels: l.panels.filter((p) => p.kind !== kind) });
+
+test("terminals open after the Output panel was closed", async () => {
+  const { dock, main } = setup();
+  await main.reconcile(layout([], "settings"));
+  dock.getPanel(OUTPUT)!.api.close();
+  await main.reconcile(without(layout([], "settings"), "output"));
+  await main.reconcile(withTerminals([1], "terminal:1"));
+  await main.reconcile(withTerminals([1, 2], "terminal:2"));
+  expect(dock.getPanel("terminal:1")).toBeDefined();
+  expect(dock.getPanel("terminal:2")).toBeDefined();
+  // Terminals share a group rather than each opening a new split.
+  expect(dock.getPanel("terminal:2")!.group).toBe(dock.getPanel("terminal:1")!.group);
+});
+
+test("settings opens when neither Output nor a document is open", async () => {
+  const { dock, main } = setup();
+  await main.reconcile(without(layout([], "settings"), "output"));
+  expect(dock.getPanel("settings")).toBeDefined();
+});
+
+test("output reopens below the documents after being closed", async () => {
+  const { dock, main } = setup();
+  await main.reconcile(layout(["/a"], "editor:/a"));
+  dock.getPanel(OUTPUT)!.api.close();
+  expect(calls).toContain("close output");
+  await main.reconcile(without(layout(["/a"], "editor:/a"), "output"));
+  await main.reconcile(layout(["/a"], OUTPUT));
+  const output = dock.getPanel(OUTPUT);
+  expect(output).toBeDefined();
+  expect(output!.group).not.toBe(dock.getPanel("editor:/a")!.group);
+  expect(dock.activePanel?.id).toBe(OUTPUT);
+});
+
+test("with nothing to anchor to, panels open in the main grid, not in a bar", async () => {
+  const { dock, main } = setup();
+  // An app bar exists and holds the active panel, as at startup.
+  const bar = dock.addEdgeGroup("right", { id: "bar:secondary", initialSize: 200, collapsedSize: 44 });
+  dock.addPanel({ id: "container:x", component: "container", title: "X", position: { referenceGroup: bar.id } });
+  dock.getPanel("container:x")!.api.setActive();
+  await main.reconcile(layout([], "settings"));
+  for (const id of [OUTPUT, "settings"]) {
+    expect(dock.getPanel(id)!.group.id).not.toBe(bar.id);
+  }
+  expect(dock.getPanel("settings")!.group.id).not.toBe(dock.getPanel(OUTPUT)!.group.id);
 });

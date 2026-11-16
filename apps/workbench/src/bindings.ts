@@ -252,7 +252,9 @@ export type Menu_Serialize = {
 export type MessageLevel = "info" | "warning" | "error";
 
 /**  Something open in the main area. */
-export type Panel = { kind: "settings" } | { kind: "editor"; path: string } | { kind: "terminal"; id: number };
+export type Panel = 
+/**  The log of plugin output and host messages. */
+{ kind: "output" } | { kind: "settings" } | { kind: "editor"; path: string } | { kind: "terminal"; id: number };
 
 export type Platform = "linux" | "macos" | "windows";
 

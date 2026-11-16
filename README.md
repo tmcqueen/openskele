@@ -97,6 +97,9 @@ gets a `workbench.focusContainer.<id>` command.
 `Mod+Alt+B` toggle them. If both are set to the same side, the secondary bar
 is drawn on the opposite one.
 
+The Output panel is a panel like the others: close it, and View → Show
+Output (`Mod+Shift+U`) brings it back.
+
 The layout (bars and open panels) belongs to the core, not the webview: it is
 in the snapshot, every change arrives as a `layoutChanged` event, and clicks
 in the webview are requests to the core. Terminals run in the core too and
