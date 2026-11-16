@@ -50,6 +50,6 @@ external access will need.
 - Revisit: MCP resources and prompts, if wanted.
 
 ## Action Items
-1. [ ] `ToolCall` request and manifest field in `skele-protocol`; `gen:protocol`.
-2. [ ] `host.tools.register` (TS) and `Tools.Register` (.NET).
-3. [ ] One sample tool per sample plugin.
+1. [x] `ToolCall` request and manifest field in `skele-protocol`; `gen:protocol`.
+2. [x] `host.tools.register` (TS) and `Tools.Register` (.NET).
+3. [x] One sample tool per sample plugin.

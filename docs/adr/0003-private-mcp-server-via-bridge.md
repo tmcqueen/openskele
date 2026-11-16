@@ -66,6 +66,6 @@ grants) make external access an additive change rather than a rework.
   client needs it.
 
 ## Action Items
-1. [ ] Spike `rmcp` server over a duplex stream.
-2. [ ] `mcp/service.rs`, `mcp/socket.rs`, `GrantStore`.
-3. [ ] `crates/skele-mcp-bridge` and its integration test (incl. bad token).
+1. [x] Spike `rmcp` server over a duplex stream.
+2. [x] `mcp/service.rs`, `mcp/socket.rs`, `GrantStore`.
+3. [x] `crates/skele-mcp-bridge` and its integration test (incl. bad token).
