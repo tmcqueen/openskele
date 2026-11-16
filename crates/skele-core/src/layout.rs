@@ -1,7 +1,7 @@
 //! The workbench layout: both app bars and the open panels. The core owns it;
 //! front ends render it and send gestures back as calls.
 
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use skele_protocol::manifest::BarId;
 
 use crate::containers::ContainerInfo;
@@ -9,7 +9,7 @@ use crate::events::HostEvent;
 use crate::pty::TerminalOptions;
 use crate::{Error, Result, Workbench};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(rename_all = "camelCase")]
 pub enum BarPosition {
@@ -30,7 +30,7 @@ impl BarPosition {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(rename_all = "camelCase")]
 pub struct Bar {
@@ -41,7 +41,7 @@ pub struct Bar {
 }
 
 /// Something open in the main area.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
 pub enum Panel {
@@ -61,7 +61,7 @@ impl Panel {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(rename_all = "camelCase")]
 pub struct Layout {

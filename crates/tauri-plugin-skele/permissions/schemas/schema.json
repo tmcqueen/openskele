@@ -379,6 +379,42 @@
           "markdownDescription": "Denies the execute_command command without any pre-configured scope."
         },
         {
+          "description": "Enables the layout_close_panel command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-layout-close-panel",
+          "markdownDescription": "Enables the layout_close_panel command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the layout_close_panel command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-layout-close-panel",
+          "markdownDescription": "Denies the layout_close_panel command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the layout_set_active_container command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-layout-set-active-container",
+          "markdownDescription": "Enables the layout_set_active_container command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the layout_set_active_container command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-layout-set-active-container",
+          "markdownDescription": "Denies the layout_set_active_container command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the layout_set_active_panel command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-layout-set-active-panel",
+          "markdownDescription": "Enables the layout_set_active_panel command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the layout_set_active_panel command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-layout-set-active-panel",
+          "markdownDescription": "Denies the layout_set_active_panel command without any pre-configured scope."
+        },
+        {
           "description": "Enables the snapshot command without any pre-configured scope.",
           "type": "string",
           "const": "allow-snapshot",
@@ -403,6 +439,18 @@
           "markdownDescription": "Denies the subscribe command without any pre-configured scope."
         },
         {
+          "description": "Enables the terminal_attach command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-terminal-attach",
+          "markdownDescription": "Enables the terminal_attach command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the terminal_attach command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-terminal-attach",
+          "markdownDescription": "Denies the terminal_attach command without any pre-configured scope."
+        },
+        {
           "description": "Enables the terminal_close command without any pre-configured scope.",
           "type": "string",
           "const": "allow-terminal-close",
@@ -413,18 +461,6 @@
           "type": "string",
           "const": "deny-terminal-close",
           "markdownDescription": "Denies the terminal_close command without any pre-configured scope."
-        },
-        {
-          "description": "Enables the terminal_open command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-terminal-open",
-          "markdownDescription": "Enables the terminal_open command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the terminal_open command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-terminal-open",
-          "markdownDescription": "Denies the terminal_open command without any pre-configured scope."
         },
         {
           "description": "Enables the terminal_resize command without any pre-configured scope.",
@@ -511,10 +547,10 @@
           "markdownDescription": "Denies the window_toggle_maximize command without any pre-configured scope."
         },
         {
-          "description": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-open`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`\n- `allow-chrome`\n- `allow-window-start-drag`\n- `allow-window-minimize`\n- `allow-window-toggle-maximize`\n- `allow-window-close`",
+          "description": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-attach`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`\n- `allow-layout-set-active-container`\n- `allow-layout-set-active-panel`\n- `allow-layout-close-panel`\n- `allow-chrome`\n- `allow-window-start-drag`\n- `allow-window-minimize`\n- `allow-window-toggle-maximize`\n- `allow-window-close`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-open`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`\n- `allow-chrome`\n- `allow-window-start-drag`\n- `allow-window-minimize`\n- `allow-window-toggle-maximize`\n- `allow-window-close`"
+          "markdownDescription": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-attach`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`\n- `allow-layout-set-active-container`\n- `allow-layout-set-active-panel`\n- `allow-layout-close-panel`\n- `allow-chrome`\n- `allow-window-start-drag`\n- `allow-window-minimize`\n- `allow-window-toggle-maximize`\n- `allow-window-close`"
         }
       ]
     }

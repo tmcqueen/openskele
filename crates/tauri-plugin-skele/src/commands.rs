@@ -8,7 +8,8 @@ use serde_json::Value;
 use skele_core::config::{ConfigSection, Scope};
 use skele_core::document::DocumentSnapshot;
 use skele_core::protocol::view::TreeItem;
-use skele_core::pty::{TerminalEvent, TerminalOptions};
+use skele_core::protocol::manifest::BarId;
+use skele_core::pty::TerminalEvent;
 use skele_core::{HostEvent, Snapshot, Workbench};
 use tauri::async_runtime::JoinHandle;
 use tauri::ipc::Channel;
@@ -24,14 +25,15 @@ fn message(error: impl std::fmt::Display) -> String {
 }
 
 /// What each webview holds open, so a page reload does not leak the previous
-/// page's event stream and shells.
+/// page's event stream or terminal forwarders. Terminals themselves belong to
+/// the core and outlive the page.
 #[derive(Default)]
 pub struct Sessions(Mutex<HashMap<String, Session>>);
 
 #[derive(Default)]
 pub struct Session {
     events: Option<JoinHandle<()>>,
-    terminals: Vec<u32>,
+    attachments: Vec<JoinHandle<()>>,
 }
 
 #[tauri::command]
@@ -65,15 +67,10 @@ pub fn subscribe(
         }
     });
 
-    let session = Session { events: Some(forward), terminals: Vec::new() };
+    let session = Session { events: Some(forward), attachments: Vec::new() };
     let previous = sessions.0.lock().unwrap().insert(webview.label().to_owned(), session);
     if let Some(previous) = previous {
-        if let Some(events) = previous.events {
-            events.abort();
-        }
-        for id in previous.terminals {
-            workbench.terminals().close(id);
-        }
+        previous.events.into_iter().chain(previous.attachments).for_each(|task| task.abort());
     }
 }
 
@@ -106,22 +103,43 @@ pub fn config_set(workbench: State<'_, Workbench>, key: String, value: Option<Va
     workbench.set_config(&key, value, scope).map_err(message)
 }
 
-/// Starts a shell on a PTY and streams its output over `on_event`.
+/// Streams a core-owned terminal to the caller: its scrollback as one `data`
+/// event, `exit` if it has already ended, then live output.
 #[tauri::command]
 #[specta::specta]
-pub fn terminal_open(
+pub fn terminal_attach(
     webview: Webview,
     workbench: State<'_, Workbench>,
     sessions: State<'_, Sessions>,
-    cols: u16,
-    rows: u16,
+    id: u32,
     on_event: Channel<TerminalEvent>,
-) -> Result<u32> {
-    let shell = workbench.config().get("terminal.shell").as_str().map(str::to_owned);
-    let options = TerminalOptions { shell, cwd: workbench.workspace().map(Path::to_owned), cols, rows };
-    let id = workbench.terminals().open(options, move |event| drop(on_event.send(event))).map_err(message)?;
-    sessions.0.lock().unwrap().entry(webview.label().to_owned()).or_default().terminals.push(id);
-    Ok(id)
+) -> Result<()> {
+    let attachment = workbench.terminals().attach(id).map_err(message)?;
+    let mut events = attachment.events;
+    if !attachment.scrollback.is_empty() {
+        let _ = on_event.send(TerminalEvent::Data(attachment.scrollback));
+    }
+    let exited = attachment.exited;
+    let forward = tauri::async_runtime::spawn(async move {
+        if exited {
+            let _ = on_event.send(TerminalEvent::Exit);
+            return;
+        }
+        loop {
+            match events.recv().await {
+                Ok(event) => {
+                    let done = event == TerminalEvent::Exit;
+                    if on_event.send(event).is_err() || done {
+                        break;
+                    }
+                }
+                Err(RecvError::Lagged(_)) => {}
+                Err(RecvError::Closed) => break,
+            }
+        }
+    });
+    sessions.0.lock().unwrap().entry(webview.label().to_owned()).or_default().attachments.push(forward);
+    Ok(())
 }
 
 #[tauri::command]
@@ -158,6 +176,26 @@ pub fn document_set_text(workbench: State<'_, Workbench>, uri: String, text: Str
 #[specta::specta]
 pub fn document_save(workbench: State<'_, Workbench>, uri: String) -> Result<u32> {
     workbench.save_document(&uri).map_err(message)
+}
+
+/// Opens a container's side panel on a bar, or collapses it with `null`.
+#[tauri::command]
+#[specta::specta]
+pub fn layout_set_active_container(workbench: State<'_, Workbench>, bar: BarId, id: Option<String>) -> Result<()> {
+    workbench.set_active_container(bar, id).map_err(message)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn layout_set_active_panel(workbench: State<'_, Workbench>, id: String) -> Result<()> {
+    workbench.set_active_panel(&id).map_err(message)
+}
+
+/// Closes a panel; a terminal panel's shell ends with it.
+#[tauri::command]
+#[specta::specta]
+pub fn layout_close_panel(workbench: State<'_, Workbench>, id: String) -> Result<()> {
+    workbench.close_panel(&id).map_err(message)
 }
 
 /// The title bar style in effect for this run.

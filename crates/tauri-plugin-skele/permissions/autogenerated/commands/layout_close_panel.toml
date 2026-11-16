@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-layout-close-panel"
+description = "Enables the layout_close_panel command without any pre-configured scope."
+commands.allow = ["layout_close_panel"]
+
+[[permission]]
+identifier = "deny-layout-close-panel"
+description = "Denies the layout_close_panel command without any pre-configured scope."
+commands.deny = ["layout_close_panel"]
