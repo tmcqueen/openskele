@@ -89,7 +89,6 @@ impl Workbench {
         };
         workbench.register_builtins()?;
         workbench.apply_bar_settings();
-        workbench.update_layout_initial();
         Ok(workbench)
     }
 
@@ -182,11 +181,6 @@ impl Workbench {
     pub async fn shutdown(&self) {
         self.shutdown_plugins().await;
         self.inner.terminals.close_all();
-    }
-
-    /// The primary bar starts on the built-in views; the secondary starts collapsed.
-    fn update_layout_initial(&self) {
-        self.inner.layout.lock().unwrap().primary.active_container = Some(VIEWS_CONTAINER.to_owned());
     }
 
     fn register_builtins(&self) -> Result<()> {

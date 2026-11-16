@@ -70,6 +70,11 @@ pub struct Layout {
     /// In the order they were opened.
     pub panels: Vec<Panel>,
     pub active_panel: Option<String>,
+    /// Per bar (primary, secondary): whether a container was ever chosen for
+    /// it, collapsed included. Until then the bar takes the first container
+    /// that can show something.
+    #[serde(skip)]
+    chosen: [bool; 2],
 }
 
 impl Default for Layout {
@@ -80,6 +85,7 @@ impl Default for Layout {
             secondary: bar(BarPosition::Right),
             panels: Vec::new(),
             active_panel: None,
+            chosen: [false; 2],
         }
     }
 }
@@ -97,6 +103,13 @@ impl Layout {
             BarId::Primary => &mut self.primary,
             BarId::Secondary => &mut self.secondary,
         }
+    }
+
+    /// Sets a bar's active container (`None` collapses it) and remembers
+    /// that a choice was made.
+    pub fn choose(&mut self, bar: BarId, id: Option<String>) {
+        self.chosen[bar as usize] = true;
+        self.bar_mut(bar).active_container = id;
     }
 
     fn position(&self, id: &str) -> Option<usize> {
@@ -133,18 +146,23 @@ impl Layout {
         open
     }
 
-    /// Keeps each bar's active container pointing at a container on that bar:
-    /// one that vanished or sits on the other bar is replaced by the bar's
-    /// lowest-order container, or `None`. A bar with nothing chosen is
-    /// collapsed and stays so. Returns whether anything changed.
+    /// Keeps each bar's active container pointing at one of `containers` on
+    /// that bar. One that vanished or sits on the other bar is replaced by the
+    /// bar's lowest-order container, or `None`. A bar no one has chosen for
+    /// yet takes that container too; a chosen `None` (collapsed) is kept.
+    /// Returns whether anything changed.
     pub fn fix_containers(&mut self, containers: &[ContainerInfo]) -> bool {
         let mut changed = false;
         for bar_id in [BarId::Primary, BarId::Secondary] {
             let mut on_bar: Vec<_> = containers.iter().filter(|c| c.bar == bar_id).collect();
             on_bar.sort_by(|a, b| (a.order, &a.id).cmp(&(b.order, &b.id)));
+            let chosen = self.chosen[bar_id as usize];
             let bar = self.bar_mut(bar_id);
-            let dangling = bar.active_container.as_ref().is_some_and(|id| !on_bar.iter().any(|c| &c.id == id));
-            if dangling {
+            let replace = match &bar.active_container {
+                Some(id) => !on_bar.iter().any(|c| &c.id == id),
+                None => !chosen,
+            };
+            if replace {
                 let fallback = on_bar.first().map(|c| c.id.clone());
                 if bar.active_container != fallback {
                     bar.active_container = fallback;
@@ -210,7 +228,7 @@ impl Workbench {
                 return Err(Error::UnknownContainer(id.clone()));
             }
         }
-        self.update_layout(|layout| layout.bar_mut(bar).active_container = id);
+        self.update_layout(|layout| layout.choose(bar, id));
         Ok(())
     }
 
@@ -220,9 +238,8 @@ impl Workbench {
             return Err(Error::UnknownContainer(id.to_owned()));
         }
         self.update_layout(|layout| {
-            let bar = layout.bar_mut(bar);
-            bar.visible = true;
-            bar.active_container = Some(id.to_owned());
+            layout.bar_mut(bar).visible = true;
+            layout.choose(bar, Some(id.to_owned()));
         });
         Ok(())
     }
@@ -257,9 +274,12 @@ impl Workbench {
         });
     }
 
-    /// Repairs active containers after containers were added or removed.
+    /// Repairs active containers after containers or views were added or
+    /// removed. Only containers with at least one view can be active.
     pub(crate) fn fix_layout_containers(&self) {
-        let containers = self.inner.containers.list();
+        let views = self.inner.views.list();
+        let mut containers = self.inner.containers.list();
+        containers.retain(|c| views.iter().any(|v| v.container == c.id));
         self.update_layout(|layout| layout.fix_containers(&containers));
     }
 }
@@ -344,8 +364,16 @@ mod tests {
     }
 
     #[test]
+    fn fix_containers_fills_unchosen_bar() {
+        let mut layout = Layout::default();
+        assert!(layout.fix_containers(&[container("b", BarId::Primary, 2), container("a", BarId::Primary, 1)]));
+        assert_eq!(layout.primary.active_container.as_deref(), Some("a"));
+    }
+
+    #[test]
     fn fix_containers_keeps_collapsed() {
         let mut layout = Layout::default();
+        layout.choose(BarId::Primary, None);
         assert!(!layout.fix_containers(&[container("a", BarId::Primary, 1)]));
         assert_eq!(layout.primary.active_container, None);
     }
@@ -366,7 +394,7 @@ mod tests {
         layout.primary.active_container = Some("s".into());
         layout.fix_containers(&containers);
         assert_eq!(layout.primary.active_container.as_deref(), Some("p"));
-        assert_eq!(layout.secondary.active_container, None); // collapsed stays collapsed
+        assert_eq!(layout.secondary.active_container.as_deref(), Some("s"));
     }
 
     #[test]

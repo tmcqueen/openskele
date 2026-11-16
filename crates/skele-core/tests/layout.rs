@@ -111,20 +111,71 @@ async fn focus_container_command_reveals_it() {
     assert!(layout.primary.visible);
 }
 
-#[test]
-fn install_keeps_existing_choice() {
-    let tmp = tempfile::tempdir().unwrap();
-    let dir = tmp.path().join("p");
+fn install(workbench: &Workbench, dir: &std::path::Path, name: &str, contributes: serde_json::Value) {
+    let dir = dir.join(name);
     std::fs::create_dir_all(&dir).unwrap();
     let manifest = json!({
-        "id": "test.p", "name": "P", "version": "0", "protocol": "0.1", "main": { "command": "/bin/false" },
-        "contributes": { "viewContainers": [{ "id": "p.box", "title": "Box", "icon": "package", "order": -1 }] }
+        "id": format!("test.{name}"), "name": name, "version": "0", "protocol": "0.1",
+        "main": { "command": "/bin/false" }, "contributes": contributes,
     });
     std::fs::write(dir.join("skele-plugin.json"), manifest.to_string()).unwrap();
-    let workbench = workbench();
-    assert_eq!(workbench.layout().primary.active_container.as_deref(), Some("workbench.views"));
     workbench.install_plugin(&dir).unwrap();
-    assert_eq!(workbench.layout().primary.active_container.as_deref(), Some("workbench.views"));
+}
+
+#[test]
+fn first_container_with_views_is_chosen_then_kept() {
+    let tmp = tempfile::tempdir().unwrap();
+    let workbench = workbench();
+    // The built-in Views container is empty, so nothing is chosen yet.
+    assert_eq!(workbench.layout().primary.active_container, None);
+
+    // A container without views is not chosen.
+    install(
+        &workbench,
+        tmp.path(),
+        "empty",
+        json!({ "viewContainers": [{ "id": "e.box", "title": "E", "icon": "x", "order": -5 }] }),
+    );
+    assert_eq!(workbench.layout().primary.active_container, None);
+
+    install(
+        &workbench,
+        tmp.path(),
+        "b",
+        json!({
+            "viewContainers": [{ "id": "b.box", "title": "B", "icon": "x", "order": 2 }],
+            "views": [{ "id": "b.v", "title": "V", "container": "b.box" }],
+        }),
+    );
+    assert_eq!(workbench.layout().primary.active_container.as_deref(), Some("b.box"));
+
+    // A lower-order container arriving later does not take over.
+    install(
+        &workbench,
+        tmp.path(),
+        "a",
+        json!({
+            "viewContainers": [{ "id": "a.box", "title": "A", "icon": "x", "order": 1 }],
+            "views": [{ "id": "a.v", "title": "V", "container": "a.box" }],
+        }),
+    );
+    assert_eq!(workbench.layout().primary.active_container.as_deref(), Some("b.box"));
+}
+
+#[test]
+fn collapsed_bar_stays_collapsed_on_install() {
+    let tmp = tempfile::tempdir().unwrap();
+    let workbench = workbench();
+    workbench.set_active_container(BarId::Secondary, None).unwrap();
+    install(
+        &workbench,
+        tmp.path(),
+        "s",
+        json!({
+            "viewContainers": [{ "id": "s.box", "title": "S", "icon": "x", "bar": "secondary" }],
+            "views": [{ "id": "s.v", "title": "V", "container": "s.box" }],
+        }),
+    );
     assert_eq!(workbench.layout().secondary.active_container, None);
 }
 
@@ -139,7 +190,7 @@ async fn show_commands_emits_palette_event() {
 #[test]
 fn snapshot_has_layout_and_containers() {
     let snapshot = workbench().snapshot();
-    assert_eq!(snapshot.layout.primary.active_container.as_deref(), Some("workbench.views"));
+    assert_eq!(snapshot.layout, workbench().layout());
     assert!(snapshot.containers.iter().any(|c| c.id == "workbench.views"));
 }
 
@@ -160,6 +211,7 @@ fn panel_calls_validate_ids() {
 fn unchanged_calls_emit_nothing() {
     let workbench = workbench();
     workbench.open_panel(Panel::Settings);
+    workbench.set_active_container(BarId::Primary, Some("workbench.views".into())).unwrap();
     let mut events = workbench.bus().subscribe();
     workbench.open_panel(Panel::Settings);
     workbench.set_active_container(BarId::Primary, Some("workbench.views".into())).unwrap();
