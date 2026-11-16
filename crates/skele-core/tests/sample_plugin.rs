@@ -23,6 +23,7 @@ async fn host_and_sample_plugin_round_trip() {
     let workbench = Workbench::new(WorkbenchOptions {
         user_settings: Some(dir.path().join("settings.json")),
         workspace: Some(dir.path().join("workspace")),
+        log_dir: None,
     })
     .unwrap();
     let mut events = workbench.bus().subscribe();

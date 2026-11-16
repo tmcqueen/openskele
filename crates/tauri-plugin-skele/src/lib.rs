@@ -94,6 +94,7 @@ impl Builder {
                 let workbench = Workbench::new(WorkbenchOptions {
                     user_settings: Some(app.path().app_config_dir()?.join("settings.json")),
                     workspace,
+                    log_dir: None,
                 })?;
                 plugin_dirs.push(app.path().app_data_dir()?.join("plugins"));
                 for dir in &plugin_dirs {

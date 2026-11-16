@@ -1,13 +1,22 @@
 //! Output channels: what plugins, agents and the host write for people to read
 //! while debugging. Each channel keeps its most recent lines in memory.
 
+mod log;
+
 use std::collections::{BTreeMap, VecDeque};
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use skele_protocol::methods::MessageLevel;
 
 use crate::events::HostEvent;
 use crate::{Error, Result, Workbench};
+
+pub use log::{log_file_name, LogSink};
+
+/// Settings that turn on log files; both are needed.
+pub const LOG_TO_FILE: &str = "output.logToFile";
+pub const LOG_DIRECTORY: &str = "output.logDirectory";
 
 /// Lines kept per channel; older ones are dropped.
 pub const OUTPUT_LINES: usize = 10_000;
@@ -85,13 +94,110 @@ fn level_name(level: MessageLevel) -> &'static str {
     }
 }
 
+/// Where output is mirrored to files, if anywhere.
+#[derive(Default)]
+pub(crate) struct LogState {
+    /// The configured base directory the sink was opened for.
+    base: Option<PathBuf>,
+    sink: Option<LogSink>,
+}
+
 impl Workbench {
-    /// Writes to an output channel, creating it on first use.
+    /// Writes to an output channel, creating it on first use, and to its log
+    /// file when logging is on.
     pub fn output(&self, channel: &str, text: &str) {
-        if self.inner.output.append(channel, text) {
-            self.inner.bus.emit(HostEvent::OutputChannelsChanged);
+        // The log lock is held across the append so a sink being opened sees
+        // each write exactly once: in the buffer it copies, or here.
+        let failed = {
+            let mut log = self.inner.log.lock().unwrap();
+            let created = self.inner.output.append(channel, text);
+            let failed = match log.sink.as_mut().map(|sink| sink.write(channel, text)) {
+                Some(Err(e)) => {
+                    log.sink = None;
+                    Some(e)
+                }
+                _ => None,
+            };
+            if created {
+                self.inner.bus.emit(HostEvent::OutputChannelsChanged);
+            }
+            self.inner.bus.emit(HostEvent::OutputAppended { channel: channel.to_owned(), text: text.to_owned() });
+            failed
+        };
+        if let Some(e) = failed {
+            self.notify(MessageLevel::Warning, &format!("stopped writing log files: {e}"), None);
         }
-        self.inner.bus.emit(HostEvent::OutputAppended { channel: channel.to_owned(), text: text.to_owned() });
+    }
+
+    /// The folder this run's log files are written to, if logging is on.
+    pub fn log_dir(&self) -> Option<PathBuf> {
+        self.inner.log.lock().unwrap().sink.as_ref().map(|sink| sink.run_dir().to_owned())
+    }
+
+    /// Starts, stops or moves log files to match the startup flag or, without
+    /// it, the two settings.
+    pub(crate) fn apply_log_settings(&self) {
+        let (base, warning) = self.log_base();
+        // Warnings are written after the lock is released: writing output takes it too.
+        let error = {
+            let mut log = self.inner.log.lock().unwrap();
+            if log.base == base {
+                None
+            } else {
+                log.sink = None;
+                log.base = base.clone();
+                match base.as_deref().map(|dir| self.open_sink(dir)) {
+                    Some(Ok(sink)) => {
+                        log.sink = Some(sink);
+                        None
+                    }
+                    Some(Err(e)) => Some(format!("cannot write log files to {}: {e}", base.unwrap().display())),
+                    None => None,
+                }
+            }
+        };
+        self.warn(warning.or(error));
+    }
+
+    fn warn(&self, warning: Option<String>) {
+        if let Some(warning) = warning {
+            self.notify(MessageLevel::Warning, &warning, None);
+        }
+    }
+
+    /// The directory log files go under, and a warning if the settings ask for
+    /// logging but cannot be used.
+    fn log_base(&self) -> (Option<PathBuf>, Option<String>) {
+        if let Some(flag) = &self.inner.log_flag {
+            return (Some(flag.clone()), None);
+        }
+        let config = &self.inner.config;
+        let dir = config.get(LOG_DIRECTORY);
+        let dir = dir.as_str().unwrap_or_default();
+        if config.get(LOG_TO_FILE) != serde_json::Value::Bool(true) || dir.is_empty() {
+            return (None, None);
+        }
+        let dir = Path::new(dir);
+        if dir.is_absolute() {
+            return (Some(dir.to_owned()), None);
+        }
+        match &self.inner.workspace {
+            Some(workspace) => (Some(workspace.join(dir)), None),
+            None => {
+                (None, Some(format!("{LOG_DIRECTORY} is relative and no workspace is open; not writing log files")))
+            }
+        }
+    }
+
+    /// Opens a sink and copies every channel's buffer into it. Called with the
+    /// log lock held, so no write can slip between the copy and the switch.
+    fn open_sink(&self, base: &Path) -> std::io::Result<LogSink> {
+        let mut sink = LogSink::open(base)?;
+        for channel in self.inner.output.channels() {
+            let text = self.inner.output.read(&channel).unwrap_or_default();
+            sink.write(&channel, &text)?;
+        }
+        Ok(sink)
     }
 
     pub fn output_channels(&self) -> Vec<String> {

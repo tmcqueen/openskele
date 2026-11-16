@@ -19,7 +19,7 @@ use crate::events::{EventBus, HostEvent};
 use crate::keybindings::{Keybinding, KeybindingRegistry};
 use crate::layout::{Layout, Panel, PRIMARY_POSITION, SECONDARY_POSITION};
 use crate::menus::{Menu, MenuEntry, MenuRegistry};
-use crate::output::{OutputStore, WORKBENCH_CHANNEL};
+use crate::output::{LogState, OutputStore, LOG_DIRECTORY, LOG_TO_FILE, WORKBENCH_CHANNEL};
 use crate::plugin::{PluginInfo, PluginManager};
 use crate::pty::TerminalManager;
 use crate::views::{ViewInfo, ViewRegistry};
@@ -31,6 +31,9 @@ pub struct WorkbenchOptions {
     pub user_settings: Option<PathBuf>,
     /// The open workspace folder, enabling workspace-scope settings.
     pub workspace: Option<PathBuf>,
+    /// Write output channels to files under this directory, whatever the
+    /// settings say (the `--log-dir` startup flag).
+    pub log_dir: Option<PathBuf>,
 }
 
 /// Everything a front end needs to draw its chrome, in one round trip.
@@ -61,6 +64,8 @@ pub(crate) struct Inner {
     pub(crate) terminals: TerminalManager,
     pub(crate) documents: DocumentStore,
     pub(crate) output: OutputStore,
+    pub(crate) log: Mutex<LogState>,
+    pub(crate) log_flag: Option<PathBuf>,
     pub(crate) workspace: Option<PathBuf>,
 }
 
@@ -87,12 +92,15 @@ impl Workbench {
                 terminals: Default::default(),
                 documents: Default::default(),
                 output: Default::default(),
+                log: Default::default(),
+                log_flag: options.log_dir,
                 workspace: options.workspace,
             }),
         };
         workbench.inner.output.append(WORKBENCH_CHANNEL, "");
         workbench.register_builtins()?;
         workbench.apply_bar_settings();
+        workbench.apply_log_settings();
         Ok(workbench)
     }
 
@@ -170,6 +178,9 @@ impl Workbench {
         self.inner.bus.emit(HostEvent::ConfigChanged { keys: vec![key.to_owned()] });
         if key == PRIMARY_POSITION || key == SECONDARY_POSITION {
             self.apply_bar_settings();
+        }
+        if key == LOG_TO_FILE || key == LOG_DIRECTORY {
+            self.apply_log_settings();
         }
         Ok(())
     }
@@ -269,6 +280,22 @@ impl Workbench {
             })
         };
         let properties = BTreeMap::from([
+            (
+                LOG_TO_FILE.to_owned(),
+                json!({
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Also write output channels to files. Needs output.logDirectory; the --log-dir startup flag overrides both."
+                }),
+            ),
+            (
+                LOG_DIRECTORY.to_owned(),
+                json!({
+                    "type": "string",
+                    "default": "",
+                    "description": "Folder for output log files, one subfolder per run. Relative paths are inside the workspace."
+                }),
+            ),
             (PRIMARY_POSITION.to_owned(), bar_position("left", "primary")),
             (SECONDARY_POSITION.to_owned(), bar_position("right", "secondary")),
             (

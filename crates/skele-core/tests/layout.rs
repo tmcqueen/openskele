@@ -77,7 +77,7 @@ fn position_setting_is_applied_at_startup() {
     let tmp = tempfile::tempdir().unwrap();
     let file = tmp.path().join("settings.json");
     std::fs::write(&file, r#"{ "workbench.secondaryBar.position": "top" }"#).unwrap();
-    let options = skele_core::WorkbenchOptions { user_settings: Some(file), workspace: None };
+    let options = skele_core::WorkbenchOptions { user_settings: Some(file), ..Default::default() };
     let workbench = Workbench::new(options).unwrap();
     assert_eq!(workbench.layout().secondary.position, BarPosition::Top);
 }
