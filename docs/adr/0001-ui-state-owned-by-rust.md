@@ -64,6 +64,22 @@ covered by the Rust integration tests that already guard plugins.
 - Revisit: layout persistence across restarts (not in this round).
 
 ## Action Items
-1. [ ] `containers.rs`, `layout.rs`, `LayoutChanged`; remove `OpenPanel`.
-2. [ ] Core-owned terminals with scrollback and `terminal_attach`.
-3. [ ] `reconcile()` in `apps/workbench/src/main.ts`.
+1. [x] `containers.rs`, `layout.rs`, `LayoutChanged`; remove `OpenPanel`
+   (`8c31cb1`, `961ab1e`, `266b64d`).
+2. [x] Core-owned terminals with scrollback and `terminal_attach` (`d2b5317`).
+3. [x] `reconcile()`, which landed in `apps/workbench/src/layout.ts` rather
+   than `main.ts` (`3e58d1e`, `9ef4d0e`).
+
+## Known deviations
+
+A review at `b8bd6d7` found places where the webview or IPC still changes
+layout state on its own. All three are still present on
+`m3-agent-interface` and are fixed by
+`docs/superpowers/plans/2026-11-16-post-m3-review-fixes.md`:
+
+- [#3](https://github.com/tmcqueen/openskele/issues/3): Dockview removes a
+  panel before the core confirms the close.
+- [#5](https://github.com/tmcqueen/openskele/issues/5): the webview reopens
+  Settings on reload when only Output is open, rewriting the core's layout.
+- [#6](https://github.com/tmcqueen/openskele/issues/6): the `terminal_close`
+  IPC command ends a shell without removing its panel from the layout.
