@@ -14,6 +14,7 @@ pub mod events;
 pub mod grants;
 pub mod keybindings;
 pub mod layout;
+pub mod mcp;
 pub mod menus;
 pub mod output;
 pub mod plugin;

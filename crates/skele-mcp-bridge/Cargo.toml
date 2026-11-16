@@ -1,0 +1,16 @@
+[package]
+name = "skele-mcp-bridge"
+description = "Stdio MCP server an agent launches; it pipes to the workbench's private socket"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+tokio = { workspace = true, features = ["io-std"] }
+interprocess = { version = "2.4.8", features = ["tokio"] }
+
+[dev-dependencies]
+skele-core.workspace = true
+serde_json.workspace = true
+rmcp = { version = "3.10.0", default-features = false, features = ["client", "transport-child-process"] }
+tempfile = "3"
