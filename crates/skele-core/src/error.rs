@@ -10,6 +10,10 @@ pub enum Error {
     DuplicateCommand(String),
     #[error("unknown view: {0}")]
     UnknownView(String),
+    #[error("unknown view container: {0}")]
+    UnknownContainer(String),
+    #[error("view container already registered: {0}")]
+    DuplicateContainer(String),
     #[error("unknown plugin: {0}")]
     UnknownPlugin(String),
     #[error("unknown setting: {0}")]

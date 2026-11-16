@@ -24,6 +24,7 @@ use tokio::process::{Child, Command};
 
 use self::peer::{BoxFuture, Handler, Peer};
 use crate::commands::{CommandInfo, CommandTarget};
+use crate::containers::{ContainerInfo, VIEWS_CONTAINER};
 use crate::events::HostEvent;
 use crate::keybindings::Keybinding;
 use crate::menus::MenuEntry;
@@ -177,12 +178,26 @@ impl Workbench {
                 source: Some(id.clone()),
             });
         }
+        for container in &contributes.view_containers {
+            self.register_container(ContainerInfo {
+                id: container.id.clone(),
+                title: container.title.clone(),
+                icon: container.icon.clone(),
+                bar: container.bar,
+                order: container.order,
+                source: Some(id.clone()),
+            })?;
+        }
         for view in &contributes.views {
+            let container = view.container.clone().unwrap_or_else(|| VIEWS_CONTAINER.to_owned());
+            if inner.containers.get(&container).is_none() {
+                return Err(Error::UnknownContainer(container));
+            }
             inner.views.register(ViewInfo {
                 id: view.id.clone(),
                 title: view.title.clone(),
                 kind: view.kind,
-                location: view.location,
+                container,
                 plugin_id: id.clone(),
             });
         }
@@ -196,6 +211,7 @@ impl Workbench {
         inner.menus.remove_source(id);
         inner.keybindings.remove_source(id);
         inner.views.remove_source(id);
+        inner.containers.remove_source(id);
     }
 
     pub fn plugins(&self) -> Vec<PluginInfo> {

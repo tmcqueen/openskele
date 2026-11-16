@@ -1,6 +1,14 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "definitions": {
+    "BarId": {
+      "description": "Which app bar a view container sits on.",
+      "enum": [
+        "primary",
+        "secondary"
+      ],
+      "type": "string"
+    },
     "CommandContribution": {
       "properties": {
         "category": {
@@ -78,6 +86,14 @@
           "description": "Menu location (e.g. `menubar/Tools`, `view/title`) to entries.",
           "type": "object"
         },
+        "viewContainers": {
+          "default": [],
+          "description": "Icon-strip entries on the app bars; views are placed in them by id.",
+          "items": {
+            "$ref": "#/definitions/ViewContainerContribution"
+          },
+          "type": "array"
+        },
         "views": {
           "default": [],
           "items": {
@@ -152,8 +168,49 @@
       ],
       "type": "object"
     },
+    "ViewContainerContribution": {
+      "properties": {
+        "bar": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/BarId"
+            }
+          ],
+          "default": "primary"
+        },
+        "icon": {
+          "description": "Codicon name, e.g. `package`.",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "order": {
+          "default": 0,
+          "description": "Lower sorts first within a bar.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "icon"
+      ],
+      "type": "object"
+    },
     "ViewContribution": {
       "properties": {
+        "container": {
+          "description": "Id of the view container to show the view in; the built-in\n`workbench.views` container when absent.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "id": {
           "type": "string"
         },
@@ -164,14 +221,6 @@
             }
           ],
           "default": "tree"
-        },
-        "location": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/ViewLocation"
-            }
-          ],
-          "default": "sidebar"
         },
         "title": {
           "type": "string"
@@ -187,13 +236,6 @@
       "enum": [
         "tree",
         "list"
-      ],
-      "type": "string"
-    },
-    "ViewLocation": {
-      "enum": [
-        "sidebar",
-        "panel"
       ],
       "type": "string"
     }
@@ -217,6 +259,7 @@
         "commands": [],
         "keybindings": [],
         "menus": {},
+        "viewContainers": [],
         "views": []
       }
     },

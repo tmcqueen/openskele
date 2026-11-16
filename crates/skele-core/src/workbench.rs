@@ -4,6 +4,7 @@ use std::sync::{Arc, Weak};
 
 use serde::Serialize;
 use serde_json::{json, Value};
+use skele_protocol::manifest::BarId;
 use skele_protocol::methods::{
     CommandExecute, CommandExecuteParams, ConfigDidChange, ConfigDidChangeParams, DocumentDidSave,
     DocumentDidSaveParams, ViewGetChildren, ViewGetChildrenParams,
@@ -12,6 +13,7 @@ use skele_protocol::view::TreeItem;
 
 use crate::commands::{CommandInfo, CommandRegistry, CommandTarget};
 use crate::config::{ConfigStore, Scope};
+use crate::containers::{ContainerInfo, ContainerRegistry, VIEWS_CONTAINER};
 use crate::document::DocumentStore;
 use crate::events::{EventBus, HostEvent};
 use crate::keybindings::{Keybinding, KeybindingRegistry};
@@ -37,6 +39,7 @@ pub struct Snapshot {
     pub commands: Vec<CommandInfo>,
     pub menubar: Vec<Menu>,
     pub keybindings: Vec<Keybinding>,
+    pub containers: Vec<ContainerInfo>,
     pub views: Vec<ViewInfo>,
     pub plugins: Vec<PluginInfo>,
     pub has_workspace: bool,
@@ -47,6 +50,7 @@ pub(crate) struct Inner {
     pub(crate) menus: MenuRegistry,
     pub(crate) keybindings: KeybindingRegistry,
     pub(crate) views: ViewRegistry,
+    pub(crate) containers: ContainerRegistry,
     pub(crate) config: ConfigStore,
     pub(crate) bus: EventBus,
     pub(crate) plugins: PluginManager,
@@ -70,6 +74,7 @@ impl Workbench {
                 menus: Default::default(),
                 keybindings: Default::default(),
                 views: Default::default(),
+                containers: Default::default(),
                 config: ConfigStore::open(options.user_settings, workspace_settings)?,
                 bus: Default::default(),
                 plugins: Default::default(),
@@ -119,6 +124,7 @@ impl Workbench {
             commands: self.inner.commands.list(),
             menubar: self.menubar(),
             keybindings: self.inner.keybindings.list(),
+            containers: self.inner.containers.list(),
             views: self.inner.views.list(),
             plugins: self.plugins(),
             has_workspace: self.inner.config.has_workspace(),
@@ -168,7 +174,21 @@ impl Workbench {
         self.inner.terminals.close_all();
     }
 
+    /// Reveals a container on its bar. Replaced by the layout in a later step.
+    pub(crate) fn focus_container(&self, _bar: BarId, _id: &str) -> Result<()> {
+        Ok(())
+    }
+
     fn register_builtins(&self) -> Result<()> {
+        self.register_container(ContainerInfo {
+            id: VIEWS_CONTAINER.to_owned(),
+            title: "Views".to_owned(),
+            icon: "list-tree".to_owned(),
+            bar: BarId::Primary,
+            order: 0,
+            source: None,
+        })?;
+
         // Built-ins that only reveal UI do it by event: the front end decides how.
         let open_panel = |inner: &Weak<Inner>, panel: &'static str| -> CommandTarget {
             let inner = inner.clone();

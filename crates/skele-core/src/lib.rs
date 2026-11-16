@@ -7,6 +7,7 @@
 
 pub mod commands;
 pub mod config;
+pub mod containers;
 pub mod document;
 pub mod error;
 pub mod events;
