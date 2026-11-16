@@ -18,8 +18,10 @@ pub struct Manifest {
     pub version: String,
     /// Protocol version the plugin speaks, e.g. `"0.1"`.
     pub protocol: String,
-    /// How to start the sidecar. Relative paths resolve against the manifest's directory.
-    pub main: Entry,
+    /// How to start the sidecar. Relative paths resolve against the manifest's
+    /// directory. Optional for plugins that only contribute agents or containers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub main: Option<Entry>,
     /// When to start the process. Executing a contributed command or opening a
     /// contributed view always activates the plugin; list `onStartup` to start eagerly.
     #[serde(default)]
@@ -58,6 +60,24 @@ pub struct Contributes {
     /// Tools an agent can call, served by the plugin through `tool/call`.
     #[serde(default)]
     pub tools: Vec<ToolContribution>,
+    /// Agents for the agent pane.
+    #[serde(default)]
+    pub agents: Vec<AgentContribution>,
+}
+
+/// An agent the workbench can talk to: any executable speaking the Agent Client
+/// Protocol over stdio. Relative commands resolve against the manifest's directory.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentContribution {
+    /// Unique among all agents.
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    #[serde(default)]
+    pub args: Vec<String>,
+    #[serde(default)]
+    pub env: BTreeMap<String, String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

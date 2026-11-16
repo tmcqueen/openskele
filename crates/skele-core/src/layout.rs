@@ -287,11 +287,12 @@ impl Workbench {
     }
 
     /// Repairs active containers after containers or views were added or
-    /// removed. Only containers with at least one view can be active.
+    /// removed. Only containers with something to show (views, or built-in
+    /// content) can be active.
     pub(crate) fn fix_layout_containers(&self) {
         let views = self.inner.views.list();
         let mut containers = self.inner.containers.list();
-        containers.retain(|c| views.iter().any(|v| v.container == c.id));
+        containers.retain(|c| c.builtin_content || views.iter().any(|v| v.container == c.id));
         self.update_layout(|layout| layout.fix_containers(&containers));
     }
 }
@@ -312,7 +313,7 @@ mod tests {
     }
 
     fn container(id: &str, bar: BarId, order: i32) -> ContainerInfo {
-        ContainerInfo { id: id.into(), title: id.into(), icon: "x".into(), bar, order, source: None }
+        ContainerInfo { id: id.into(), title: id.into(), icon: "x".into(), bar, order, source: None, builtin_content: false }
     }
 
     #[test]

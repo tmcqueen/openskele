@@ -17,6 +17,13 @@ Lets a webview render the workbench and drive it through its commands.
 - `allow-document-open`
 - `allow-document-set-text`
 - `allow-document-save`
+- `allow-agent-list`
+- `allow-agent-new-session`
+- `allow-agent-prompt`
+- `allow-agent-cancel`
+- `allow-agent-answer-permission`
+- `allow-agent-transcript`
+- `allow-agent-close-session`
 - `allow-output-channels`
 - `allow-output-read`
 - `allow-output-clear`
@@ -37,6 +44,188 @@ Lets a webview render the workbench and drive it through its commands.
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`skele:allow-agent-answer-permission`
+
+</td>
+<td>
+
+Enables the agent_answer_permission command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-agent-answer-permission`
+
+</td>
+<td>
+
+Denies the agent_answer_permission command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-agent-cancel`
+
+</td>
+<td>
+
+Enables the agent_cancel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-agent-cancel`
+
+</td>
+<td>
+
+Denies the agent_cancel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-agent-close-session`
+
+</td>
+<td>
+
+Enables the agent_close_session command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-agent-close-session`
+
+</td>
+<td>
+
+Denies the agent_close_session command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-agent-list`
+
+</td>
+<td>
+
+Enables the agent_list command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-agent-list`
+
+</td>
+<td>
+
+Denies the agent_list command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-agent-new-session`
+
+</td>
+<td>
+
+Enables the agent_new_session command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-agent-new-session`
+
+</td>
+<td>
+
+Denies the agent_new_session command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-agent-prompt`
+
+</td>
+<td>
+
+Enables the agent_prompt command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-agent-prompt`
+
+</td>
+<td>
+
+Denies the agent_prompt command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-agent-transcript`
+
+</td>
+<td>
+
+Enables the agent_transcript command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-agent-transcript`
+
+</td>
+<td>
+
+Denies the agent_transcript command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>

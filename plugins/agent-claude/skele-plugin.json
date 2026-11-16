@@ -1,0 +1,17 @@
+{
+  "$schema": "../../protocol/plugin-manifest.schema.json",
+  "id": "sample.agent-claude",
+  "name": "Claude Agent",
+  "version": "0.1.0",
+  "protocol": "0.2",
+  "contributes": {
+    "agents": [
+      {
+        "id": "claude",
+        "name": "Claude",
+        "command": "bunx",
+        "args": ["@agentclientprotocol/claude-agent-acp@0.107.1"]
+      }
+    ]
+  }
+}

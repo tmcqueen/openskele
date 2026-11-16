@@ -12,6 +12,24 @@
 
 **Depends on:** Milestones 1 and 2 merged (`Workbench::mcp_launch`, `GrantStore`, layout containers).
 
+## Spike notes (Task 1, 2026-11-16)
+
+Read from the crate sources and the npm registry; the end-to-end check is
+Task 3's test against the scripted agent.
+
+- Rust: `agent-client-protocol = "5.3.0"` (schema crate `agent-client-protocol-schema` 1.18, re-exported as `agent_client_protocol::v1::schema`). No default features.
+- Client shape (stable protocol v1):
+  `agent_client_protocol::Client.v1().on_receive_notification(async |n: SessionNotification, _cx| {..}, on_receive_notification!())`
+  `.on_receive_request(async |r: RequestPermissionRequest, responder, _cx| responder.respond(..), on_receive_request!())`
+  (same for `ReadTextFileRequest` / `WriteTextFileRequest`)
+  `.connect_with(transport, async |conn: v1::ConnectionTo<Agent>| {..})`.
+  The connection lives only inside that closure, so a long-lived session runs it in a spawned task that sends `conn` (`Clone`) out through a channel and then waits for a shutdown signal.
+- Requests: `conn.send_request(InitializeRequest::new(ProtocolVersion::V1)).block_task().await?`, `NewSessionRequest::new(cwd)` (+ MCP servers: `McpServer::Stdio(McpServerStdio { name, command, args, env: Vec<EnvVariable>, .. })`), `PromptRequest::new(session_id, vec![ContentBlock::Text(TextContent::new(text))])` → `stop_reason`; cancel with `conn.send_notification(CancelNotification::new(session_id))`.
+- Updates (`SessionNotification.update`): `UserMessageChunk`, `AgentMessageChunk`, `AgentThoughtChunk`, `ToolCall`, `ToolCallUpdate`, `Plan`, `PlanUpdate`, `PlanRemoved`, plus command/mode/config updates (ignored).
+- Permission: `RequestPermissionRequest.options[] { option_id, name, kind: AllowOnce|AllowAlways|RejectOnce|RejectAlways }`; answer `RequestPermissionResponse::new(RequestPermissionOutcome::Selected(SelectedPermissionOutcome::new(id)))` or `RequestPermissionOutcome::Cancelled`.
+- Transport for our own child process (we capture stderr ourselves): `agent_client_protocol::ByteStreams::new(stdin, stdout)` takes `futures::AsyncWrite`/`AsyncRead`; wrap tokio's with `tokio_util::compat` (`.compat_write()`, `.compat()`).
+- npm: `@agentclientprotocol/sdk` 2.7.0 for the scripted agent. The Claude adapter is now `@agentclientprotocol/claude-agent-acp` 0.107.1 (`@zed-industries/claude-code-acp` and `claude-agent-acp` are deprecated renames).
+
 ## Global Constraints
 
 - An agent is any ACP executable declared in `contributes.agents`; no vendor code in core.

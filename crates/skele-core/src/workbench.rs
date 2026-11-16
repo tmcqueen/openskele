@@ -13,7 +13,7 @@ use skele_protocol::view::TreeItem;
 
 use crate::commands::{CommandInfo, CommandRegistry, CommandTarget};
 use crate::config::{ConfigStore, Scope};
-use crate::containers::{ContainerInfo, ContainerRegistry, VIEWS_CONTAINER};
+use crate::containers::{ContainerInfo, ContainerRegistry, AGENT_CONTAINER, VIEWS_CONTAINER};
 use crate::document::DocumentStore;
 use crate::events::{EventBus, HostEvent};
 use crate::grants::GrantStore;
@@ -68,6 +68,8 @@ pub(crate) struct Inner {
     pub(crate) output: OutputStore,
     pub(crate) tools: ToolRegistry,
     pub(crate) grants: GrantStore,
+    pub(crate) agents: crate::agent::AgentRegistry,
+    pub(crate) agent_sessions: crate::agent::AgentSessions,
     pub(crate) mcp: tokio::sync::OnceCell<Arc<crate::mcp::McpListener>>,
     pub(crate) log: Mutex<LogState>,
     pub(crate) log_flag: Option<PathBuf>,
@@ -99,6 +101,8 @@ impl Workbench {
                 output: Default::default(),
                 tools: Default::default(),
                 grants: Default::default(),
+                agents: Default::default(),
+                agent_sessions: Default::default(),
                 mcp: Default::default(),
                 log: Default::default(),
                 // An empty directory (`SKELE_LOG_DIR=`) means no flag.
@@ -111,6 +115,8 @@ impl Workbench {
         workbench.apply_bar_settings();
         workbench.apply_log_settings();
         crate::tools::builtin::register(&workbench)?;
+        // Built-in containers with content of their own (the agent pane) can be chosen from the start.
+        workbench.fix_layout_containers();
         Ok(workbench)
     }
 
@@ -204,6 +210,7 @@ impl Workbench {
     }
 
     pub async fn shutdown(&self) {
+        self.close_agent_sessions();
         if let Some(listener) = self.inner.mcp.get() {
             listener.close();
         }
@@ -219,6 +226,16 @@ impl Workbench {
             bar: BarId::Primary,
             order: 0,
             source: None,
+            builtin_content: false,
+        })?;
+        self.register_container(ContainerInfo {
+            id: AGENT_CONTAINER.to_owned(),
+            title: "Agent".to_owned(),
+            icon: "sparkle".to_owned(),
+            bar: BarId::Secondary,
+            order: 0,
+            source: None,
+            builtin_content: true,
         })?;
 
         // Each built-in holds the workbench weakly so the registry does not keep it alive.

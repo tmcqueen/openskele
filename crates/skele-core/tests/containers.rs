@@ -76,3 +76,15 @@ fn unknown_container_fails_install_and_rolls_back() {
     assert!(workbench.config().sections().iter().all(|s| s.source.as_deref() != Some("test.broken")));
     assert!(workbench.plugins().is_empty());
 }
+
+#[test]
+fn agent_container_is_on_secondary_bar() {
+    let workbench = Workbench::new(Default::default()).unwrap();
+    let agent = workbench.containers().get("workbench.agent").expect("built-in agent container");
+    assert_eq!(agent.bar, BarId::Secondary);
+    assert_eq!(agent.icon, "sparkle");
+    assert!(agent.builtin_content, "it shows its own content, not views");
+    assert!(!workbench.containers().get(VIEWS_CONTAINER).unwrap().builtin_content);
+    // Having content of its own, it is chosen for the secondary bar like a container with views.
+    assert_eq!(workbench.layout().secondary.active_container.as_deref(), Some("workbench.agent"));
+}

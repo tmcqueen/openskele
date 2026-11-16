@@ -27,6 +27,17 @@ export const commands = {
 	documentOpen: (path: string, options?: InvokeOptions) => __TAURI_INVOKE<DocumentSnapshot>("plugin:skele|document_open", { path }, options),
 	documentSetText: (uri: string, text: string, options?: InvokeOptions) => __TAURI_INVOKE<number>("plugin:skele|document_set_text", { uri, text }, options),
 	documentSave: (uri: string, options?: InvokeOptions) => __TAURI_INVOKE<number>("plugin:skele|document_save", { uri }, options),
+	/**  Installed agents. */
+	agentList: (options?: InvokeOptions) => __TAURI_INVOKE<AgentInfo[]>("plugin:skele|agent_list", undefined, options),
+	/**  Starts an agent and opens a session; returns its id. */
+	agentNewSession: (agentId: string, options?: InvokeOptions) => __TAURI_INVOKE<string>("plugin:skele|agent_new_session", { agentId }, options),
+	/**  Sends a prompt; resolves when the turn ends. Progress arrives as `agentUpdate` events. */
+	agentPrompt: (session: string, text: string, options?: InvokeOptions) => __TAURI_INVOKE<StopReason>("plugin:skele|agent_prompt", { session, text }, options),
+	agentCancel: (session: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|agent_cancel", { session }, options),
+	/**  Answers a permission request with an option id, or `null` to cancel it. */
+	agentAnswerPermission: (session: string, request: string, option: string | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|agent_answer_permission", { session, request, option }, options),
+	agentTranscript: (session: string, options?: InvokeOptions) => __TAURI_INVOKE<Transcript_Serialize>("plugin:skele|agent_transcript", { session }, options),
+	agentCloseSession: (session: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|agent_close_session", { session }, options),
 	/**  Output channel names, the Workbench channel first. */
 	outputChannels: (options?: InvokeOptions) => __TAURI_INVOKE<string[]>("plugin:skele|output_channels", undefined, options),
 	/**  The recent text of an output channel. */
@@ -46,6 +57,13 @@ export const commands = {
 };
 
 /* Types */
+export type AgentInfo = {
+	id: string,
+	name: string,
+	/**  Contributing plugin. */
+	source: string,
+};
+
 export type Bar = Bar_Serialize | Bar_Deserialize;
 
 /**  Which app bar a view container sits on. */
@@ -159,6 +177,11 @@ export type ContainerInfo_Deserialize = {
 	order: number,
 	/**  Contributing plugin; `None` for built-ins. */
 	source?: string | null,
+	/**
+	 *  The front end draws this container itself (the agent pane) instead of
+	 *  listing views in it.
+	 */
+	builtinContent: boolean,
 };
 
 export type ContainerInfo_Serialize = {
@@ -170,6 +193,11 @@ export type ContainerInfo_Serialize = {
 	order: number,
 	/**  Contributing plugin; `None` for built-ins. */
 	source: string | null,
+	/**
+	 *  The front end draws this container itself (the agent pane) instead of
+	 *  listing views in it.
+	 */
+	builtinContent: boolean,
 };
 
 export type DocumentSnapshot = {
@@ -179,6 +207,24 @@ export type DocumentSnapshot = {
 	version: number,
 	dirty: boolean,
 };
+
+export type Entry = Entry_Serialize | Entry_Deserialize;
+
+export type Entry_Deserialize = { type: "userMessage"; text: string } | 
+/**  Markdown, streamed: consecutive chunks extend one entry. */
+{ type: "agentText"; text: string } | { type: "thought"; text: string } | { type: "toolCall"; id: string; title: string; kind: string; status: string; content: string[] } | 
+/**  The agent's current plan; a new plan replaces it in place. */
+{ type: "plan"; entries: PlanEntry[] } | 
+/**  `answer` is the chosen option id, `"cancelled"`, or `None` while waiting. */
+{ type: "permissionRequest"; id: string; title: string; options: PermissionOption[]; answer?: string | null } | { type: "error"; message: string };
+
+export type Entry_Serialize = { type: "userMessage"; text: string } | 
+/**  Markdown, streamed: consecutive chunks extend one entry. */
+{ type: "agentText"; text: string } | { type: "thought"; text: string } | { type: "toolCall"; id: string; title: string; kind: string; status: string; content: string[] } | 
+/**  The agent's current plan; a new plan replaces it in place. */
+{ type: "plan"; entries: PlanEntry[] } | 
+/**  `answer` is the chosen option id, `"cancelled"`, or `None` while waiting. */
+{ type: "permissionRequest"; id: string; title: string; options: PermissionOption[]; answer: string | null } | { type: "error"; message: string };
 
 export type HostEvent = HostEvent_Serialize | HostEvent_Deserialize;
 
@@ -194,7 +240,16 @@ export type HostEvent_Deserialize =
 /**  The bars or open panels changed; this is the whole new layout. */
 { type: "layoutChanged"; layout: Layout_Deserialize } | 
 /**  Open the command palette overlay. */
-{ type: "showCommandPalette" } | { type: "pluginState"; pluginId: string; state: PluginState } | { type: "documentSaved"; uri: string; version: number };
+{ type: "showCommandPalette" } | 
+/**  One transcript entry of an agent session changed or was added; same index means replace. */
+{ type: "agentUpdate"; session: string; index: number; entry: Entry_Deserialize } | 
+/**  An agent session ended: closed, or the agent exited. */
+{ type: "agentSessionEnded"; session: string; reason: string } | { type: "pluginState"; pluginId: string; state: PluginState } | 
+/**
+ *  A document's text was replaced by someone other than its editor (an
+ *  agent); open editors should reload it.
+ */
+{ type: "documentChanged"; uri: string; version: number } | { type: "documentSaved"; uri: string; version: number };
 
 export type HostEvent_Serialize = 
 /**  Commands, menus, keybindings, views or config schemas changed; re-fetch the snapshot. */
@@ -208,7 +263,16 @@ export type HostEvent_Serialize =
 /**  The bars or open panels changed; this is the whole new layout. */
 { type: "layoutChanged"; layout: Layout_Serialize } | 
 /**  Open the command palette overlay. */
-{ type: "showCommandPalette" } | { type: "pluginState"; pluginId: string; state: PluginState } | { type: "documentSaved"; uri: string; version: number };
+{ type: "showCommandPalette" } | 
+/**  One transcript entry of an agent session changed or was added; same index means replace. */
+{ type: "agentUpdate"; session: string; index: number; entry: Entry_Serialize } | 
+/**  An agent session ended: closed, or the agent exited. */
+{ type: "agentSessionEnded"; session: string; reason: string } | { type: "pluginState"; pluginId: string; state: PluginState } | 
+/**
+ *  A document's text was replaced by someone other than its editor (an
+ *  agent); open editors should reload it.
+ */
+{ type: "documentChanged"; uri: string; version: number } | { type: "documentSaved"; uri: string; version: number };
 
 export type Keybinding = Keybinding_Serialize | Keybinding_Deserialize;
 
@@ -269,6 +333,19 @@ export type Panel =
 /**  The log of plugin output and host messages. */
 { kind: "output" } | { kind: "settings" } | { kind: "editor"; path: string } | { kind: "terminal"; id: number };
 
+export type PermissionOption = {
+	id: string,
+	name: string,
+	/**  `allow_once`, `allow_always`, `reject_once` or `reject_always`. */
+	kind: string,
+};
+
+export type PlanEntry = {
+	content: string,
+	/**  `pending`, `in_progress` or `completed`. */
+	status: string,
+};
+
 export type Platform = "linux" | "macos" | "windows";
 
 export type PluginInfo = {
@@ -315,6 +392,13 @@ export type Snapshot_Serialize = {
 	hasWorkspace: boolean,
 };
 
+/**  Why a prompt turn ended. */
+export type StopReason = "endTurn" | "cancelled" | 
+/**  The agent failed or exited during the turn; the transcript says why. */
+"error" | 
+/**  Another ACP stop reason, such as `max_tokens` or `refusal`. */
+{ other: string };
+
 export type TerminalEvent = { type: "data"; data: string } | { type: "exit" };
 
 export type TitleBar = 
@@ -322,6 +406,16 @@ export type TitleBar =
 "custom" | 
 /**  The OS frame and a native menu bar. */
 "native";
+
+export type Transcript = Transcript_Serialize | Transcript_Deserialize;
+
+export type Transcript_Deserialize = {
+	entries: Entry_Deserialize[],
+};
+
+export type Transcript_Serialize = {
+	entries: Entry_Serialize[],
+};
 
 /**  One row of a tree or list view. */
 export type TreeItem = TreeItem_Serialize | TreeItem_Deserialize;

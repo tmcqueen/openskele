@@ -9,7 +9,7 @@ JSON-RPC 2.0 over stdio.
 | Path | What it is |
 | --- | --- |
 | `crates/skele-protocol` | Wire types: JSON-RPC envelope, protocol methods, plugin manifest, view models. Source of the schema documents. |
-| `crates/skele-core` | Headless core, no Tauri: command/menu/keybinding/view/view-container registries, the layout (both app bars and the open panels), config store, event bus, plugin host, PTY terminals (portable-pty), document buffers (ropey), output channels, the tool registry and grants, and the private MCP server (rmcp). |
+| `crates/skele-core` | Headless core, no Tauri: command/menu/keybinding/view/view-container registries, the layout (both app bars and the open panels), config store, event bus, plugin host, PTY terminals (portable-pty), document buffers (ropey), output channels, the tool registry and grants, the private MCP server (rmcp), and the ACP client for agents with their transcripts. |
 | `crates/tauri-plugin-skele` | The core packaged as a Tauri plugin: typed commands (tauri-specta), `Channel` streaming, permissions, native menu built from the menu registry. |
 | `apps/workbench` | The app. `src-tauri` is a few lines of wiring; `src` is the generic renderer (Dockview layout with the app bars as edge groups; tree, list, form, xterm.js terminal, Monaco editor; codicons). |
 | `protocol/` | Generated `openrpc.json` and `plugin-manifest.schema.json`. |
@@ -18,6 +18,8 @@ JSON-RPC 2.0 over stdio.
 | `plugins/sample-bun` | Sample plugin in Bun/TypeScript. |
 | `plugins/sample-dotnet` | Sample plugin in C#. |
 | `crates/skele-mcp-bridge` | The stdio MCP server an agent launches; it pipes to the workbench's private socket. |
+| `plugins/agent-scripted` | A deterministic ACP agent for tests (Bun). |
+| `plugins/agent-claude` | Claude Code as an agent, through its ACP adapter. |
 | `scripts/gen` | The SDK generators: one shared model of the protocol document, one emitter per language. |
 
 ## Running
@@ -146,6 +148,34 @@ Each agent session gets a grant (a random token); the agent launches
 workbench's local socket (owner-only on Unix) with that token. No TCP port is
 opened, and revoking the grant ends the connection. See
 `docs/adr/0003-private-mcp-server-via-bridge.md`.
+
+## Agents
+
+The Agent container on the secondary bar is a chat with an agent. An agent is
+any executable that speaks the [Agent Client Protocol](https://agentclientprotocol.com)
+on stdio, declared in a plugin manifest; a plugin with only agents needs no `main`:
+
+```json
+"contributes": {
+  "agents": [{ "id": "claude", "name": "Claude", "command": "bunx", "args": ["@agentclientprotocol/claude-agent-acp@0.107.1"] }]
+}
+```
+
+Each session starts its own agent process, in the workspace, and gives it the
+workbench's tools as an MCP server (the bridge, under a grant for that session
+that is revoked when the session ends). The agent's file reads see unsaved
+editor buffers and its writes go through the editor. Its stderr is an output
+channel named after it. The transcript (messages, thinking, tool calls, plan,
+permission requests) is kept in the core; agent text is rendered as markdown
+with HTML disabled and sanitized.
+
+Approval is the agent's: it asks before acting, and the request shows in the
+transcript with its options. The workbench marks each tool read-only or
+destructive to help it decide (`docs/adr/0006-tool-approval-delegated-to-agent.md`).
+
+`plugins/agent-claude` uses your existing `claude` login. `plugins/agent-scripted`
+answers fixed prompts (`hello`, `open settings`, `ask`, `plan`, `read <path>`,
+`write <path>`) and is what the tests drive.
 
 ## Output channels
 

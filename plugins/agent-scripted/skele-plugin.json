@@ -1,0 +1,10 @@
+{
+  "$schema": "../../protocol/plugin-manifest.schema.json",
+  "id": "sample.agent-scripted",
+  "name": "Scripted Agent",
+  "version": "0.1.0",
+  "protocol": "0.2",
+  "contributes": {
+    "agents": [{ "id": "scripted", "name": "Scripted", "command": "bun", "args": ["run", "src/main.ts"] }]
+  }
+}

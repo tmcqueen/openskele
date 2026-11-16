@@ -5,6 +5,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 use serde_json::Value;
+use skele_core::agent::{AgentInfo, StopReason, Transcript};
 use skele_core::config::{ConfigSection, Scope};
 use skele_core::document::DocumentSnapshot;
 use skele_core::protocol::view::TreeItem;
@@ -196,6 +197,58 @@ pub fn output_read(workbench: State<'_, Workbench>, channel: String) -> Result<S
 #[specta::specta]
 pub fn output_clear(workbench: State<'_, Workbench>, channel: String) -> Result<()> {
     workbench.output_clear(&channel).map_err(message)
+}
+
+/// Installed agents.
+#[tauri::command]
+#[specta::specta]
+pub fn agent_list(workbench: State<'_, Workbench>) -> Vec<AgentInfo> {
+    workbench.agents()
+}
+
+/// Starts an agent and opens a session; returns its id.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_new_session(workbench: State<'_, Workbench>, agent_id: String) -> Result<String> {
+    workbench.new_agent_session(&agent_id).await.map_err(message)
+}
+
+/// Sends a prompt; resolves when the turn ends. Progress arrives as `agentUpdate` events.
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_prompt(workbench: State<'_, Workbench>, session: String, text: String) -> Result<StopReason> {
+    workbench.agent_prompt(&session, text).await.map_err(message)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_cancel(workbench: State<'_, Workbench>, session: String) -> Result<()> {
+    workbench.agent_cancel(&session).await.map_err(message)
+}
+
+/// Answers a permission request with an option id, or `null` to cancel it.
+#[tauri::command]
+#[specta::specta]
+pub fn agent_answer_permission(
+    workbench: State<'_, Workbench>,
+    session: String,
+    request: String,
+    option: Option<String>,
+) -> Result<()> {
+    workbench.agent_answer_permission(&session, &request, option).map_err(message)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn agent_transcript(workbench: State<'_, Workbench>, session: String) -> Result<Transcript> {
+    workbench.agent_transcript(&session).map_err(message)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn agent_close_session(workbench: State<'_, Workbench>, session: String) -> Result<()> {
+    workbench.close_agent_session(&session).await;
+    Ok(())
 }
 
 /// Opens a container's side panel on a bar, or collapses it with `null`.

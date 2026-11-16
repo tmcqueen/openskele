@@ -295,6 +295,90 @@
       "type": "string",
       "oneOf": [
         {
+          "description": "Enables the agent_answer_permission command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-agent-answer-permission",
+          "markdownDescription": "Enables the agent_answer_permission command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the agent_answer_permission command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-agent-answer-permission",
+          "markdownDescription": "Denies the agent_answer_permission command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the agent_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-agent-cancel",
+          "markdownDescription": "Enables the agent_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the agent_cancel command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-agent-cancel",
+          "markdownDescription": "Denies the agent_cancel command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the agent_close_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-agent-close-session",
+          "markdownDescription": "Enables the agent_close_session command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the agent_close_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-agent-close-session",
+          "markdownDescription": "Denies the agent_close_session command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the agent_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-agent-list",
+          "markdownDescription": "Enables the agent_list command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the agent_list command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-agent-list",
+          "markdownDescription": "Denies the agent_list command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the agent_new_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-agent-new-session",
+          "markdownDescription": "Enables the agent_new_session command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the agent_new_session command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-agent-new-session",
+          "markdownDescription": "Denies the agent_new_session command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the agent_prompt command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-agent-prompt",
+          "markdownDescription": "Enables the agent_prompt command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the agent_prompt command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-agent-prompt",
+          "markdownDescription": "Denies the agent_prompt command without any pre-configured scope."
+        },
+        {
+          "description": "Enables the agent_transcript command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-agent-transcript",
+          "markdownDescription": "Enables the agent_transcript command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the agent_transcript command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-agent-transcript",
+          "markdownDescription": "Denies the agent_transcript command without any pre-configured scope."
+        },
+        {
           "description": "Enables the chrome command without any pre-configured scope.",
           "type": "string",
           "const": "allow-chrome",
@@ -583,10 +667,10 @@
           "markdownDescription": "Denies the window_toggle_maximize command without any pre-configured scope."
         },
         {
-          "description": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-attach`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`\n- `allow-output-channels`\n- `allow-output-read`\n- `allow-output-clear`\n- `allow-layout-set-active-container`\n- `allow-layout-set-active-panel`\n- `allow-layout-close-panel`\n- `allow-chrome`\n- `allow-window-start-drag`\n- `allow-window-minimize`\n- `allow-window-toggle-maximize`\n- `allow-window-close`",
+          "description": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-attach`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`\n- `allow-agent-list`\n- `allow-agent-new-session`\n- `allow-agent-prompt`\n- `allow-agent-cancel`\n- `allow-agent-answer-permission`\n- `allow-agent-transcript`\n- `allow-agent-close-session`\n- `allow-output-channels`\n- `allow-output-read`\n- `allow-output-clear`\n- `allow-layout-set-active-container`\n- `allow-layout-set-active-panel`\n- `allow-layout-close-panel`\n- `allow-chrome`\n- `allow-window-start-drag`\n- `allow-window-minimize`\n- `allow-window-toggle-maximize`\n- `allow-window-close`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-attach`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`\n- `allow-output-channels`\n- `allow-output-read`\n- `allow-output-clear`\n- `allow-layout-set-active-container`\n- `allow-layout-set-active-panel`\n- `allow-layout-close-panel`\n- `allow-chrome`\n- `allow-window-start-drag`\n- `allow-window-minimize`\n- `allow-window-toggle-maximize`\n- `allow-window-close`"
+          "markdownDescription": "Lets a webview render the workbench and drive it through its commands.\n#### This default permission set includes:\n\n- `allow-snapshot`\n- `allow-subscribe`\n- `allow-execute-command`\n- `allow-view-children`\n- `allow-config-sections`\n- `allow-config-set`\n- `allow-terminal-attach`\n- `allow-terminal-write`\n- `allow-terminal-resize`\n- `allow-terminal-close`\n- `allow-document-open`\n- `allow-document-set-text`\n- `allow-document-save`\n- `allow-agent-list`\n- `allow-agent-new-session`\n- `allow-agent-prompt`\n- `allow-agent-cancel`\n- `allow-agent-answer-permission`\n- `allow-agent-transcript`\n- `allow-agent-close-session`\n- `allow-output-channels`\n- `allow-output-read`\n- `allow-output-clear`\n- `allow-layout-set-active-container`\n- `allow-layout-set-active-panel`\n- `allow-layout-close-panel`\n- `allow-chrome`\n- `allow-window-start-drag`\n- `allow-window-minimize`\n- `allow-window-toggle-maximize`\n- `allow-window-close`"
         }
       ]
     }
