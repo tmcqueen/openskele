@@ -139,6 +139,7 @@ impl Workbench {
             Plugin { manifest, dir: dir.to_owned(), state: Mutex::new(PluginState::Idle), session: Default::default() };
         self.inner.plugins.plugins.write().unwrap().insert(id.clone(), Arc::new(plugin));
         self.bus().emit(HostEvent::ContributionsChanged);
+        self.fix_layout_containers();
         Ok(id)
     }
 
@@ -212,6 +213,7 @@ impl Workbench {
         inner.keybindings.remove_source(id);
         inner.views.remove_source(id);
         inner.containers.remove_source(id);
+        self.fix_layout_containers();
     }
 
     pub fn plugins(&self) -> Vec<PluginInfo> {

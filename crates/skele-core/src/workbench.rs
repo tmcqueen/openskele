@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Weak};
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use serde_json::{json, Value};
@@ -17,6 +17,7 @@ use crate::containers::{ContainerInfo, ContainerRegistry, VIEWS_CONTAINER};
 use crate::document::DocumentStore;
 use crate::events::{EventBus, HostEvent};
 use crate::keybindings::{Keybinding, KeybindingRegistry};
+use crate::layout::{Layout, Panel, PRIMARY_POSITION, SECONDARY_POSITION};
 use crate::menus::{Menu, MenuEntry, MenuRegistry};
 use crate::plugin::{PluginInfo, PluginManager};
 use crate::pty::TerminalManager;
@@ -41,6 +42,7 @@ pub struct Snapshot {
     pub keybindings: Vec<Keybinding>,
     pub containers: Vec<ContainerInfo>,
     pub views: Vec<ViewInfo>,
+    pub layout: Layout,
     pub plugins: Vec<PluginInfo>,
     pub has_workspace: bool,
 }
@@ -51,6 +53,7 @@ pub(crate) struct Inner {
     pub(crate) keybindings: KeybindingRegistry,
     pub(crate) views: ViewRegistry,
     pub(crate) containers: ContainerRegistry,
+    pub(crate) layout: Mutex<Layout>,
     pub(crate) config: ConfigStore,
     pub(crate) bus: EventBus,
     pub(crate) plugins: PluginManager,
@@ -75,6 +78,7 @@ impl Workbench {
                 keybindings: Default::default(),
                 views: Default::default(),
                 containers: Default::default(),
+                layout: Default::default(),
                 config: ConfigStore::open(options.user_settings, workspace_settings)?,
                 bus: Default::default(),
                 plugins: Default::default(),
@@ -84,6 +88,8 @@ impl Workbench {
             }),
         };
         workbench.register_builtins()?;
+        workbench.apply_bar_settings();
+        workbench.update_layout_initial();
         Ok(workbench)
     }
 
@@ -126,6 +132,7 @@ impl Workbench {
             keybindings: self.inner.keybindings.list(),
             containers: self.inner.containers.list(),
             views: self.inner.views.list(),
+            layout: self.layout(),
             plugins: self.plugins(),
             has_workspace: self.inner.config.has_workspace(),
         }
@@ -158,6 +165,9 @@ impl Workbench {
         let changes = BTreeMap::from([(key.to_owned(), self.inner.config.get(key))]);
         self.notify_plugins::<ConfigDidChange>(ConfigDidChangeParams { changes });
         self.inner.bus.emit(HostEvent::ConfigChanged { keys: vec![key.to_owned()] });
+        if key == PRIMARY_POSITION || key == SECONDARY_POSITION {
+            self.apply_bar_settings();
+        }
         Ok(())
     }
 
@@ -174,9 +184,9 @@ impl Workbench {
         self.inner.terminals.close_all();
     }
 
-    /// Reveals a container on its bar. Replaced by the layout in a later step.
-    pub(crate) fn focus_container(&self, _bar: BarId, _id: &str) -> Result<()> {
-        Ok(())
+    /// The primary bar starts on the built-in views; the secondary starts collapsed.
+    fn update_layout_initial(&self) {
+        self.inner.layout.lock().unwrap().primary.active_container = Some(VIEWS_CONTAINER.to_owned());
     }
 
     fn register_builtins(&self) -> Result<()> {
@@ -189,55 +199,74 @@ impl Workbench {
             source: None,
         })?;
 
-        // Built-ins that only reveal UI do it by event: the front end decides how.
-        let open_panel = |inner: &Weak<Inner>, panel: &'static str| -> CommandTarget {
-            let inner = inner.clone();
-            CommandTarget::Builtin(Arc::new(move |_args| {
-                let inner = inner.upgrade();
+        // Each built-in holds the workbench weakly so the registry does not keep it alive.
+        let weak = Arc::downgrade(&self.inner);
+        let builtin = |run: fn(&Workbench, Vec<Value>) -> Result<Value>| -> CommandTarget {
+            let weak = weak.clone();
+            CommandTarget::Builtin(Arc::new(move |args| {
+                let inner = weak.upgrade();
                 Box::pin(async move {
-                    if let Some(inner) = inner {
-                        inner.bus.emit(HostEvent::OpenPanel { panel: panel.to_owned(), arg: None });
+                    match inner {
+                        Some(inner) => run(&Workbench { inner }, args),
+                        None => Ok(Value::Null),
                     }
-                    Ok(Value::Null)
                 })
             }))
         };
-        let weak = Arc::downgrade(&self.inner);
-        let builtins = [
-            ("workbench.showCommands", "Show All Commands", "commands", "menubar/View", "Mod+Shift+P"),
-            ("workbench.openSettings", "Open Settings", "settings", "menubar/File", "Mod+,"),
-            ("workbench.newTerminal", "New Terminal", "terminal", "menubar/View", "Mod+Shift+T"),
+        type Run = fn(&Workbench, Vec<Value>) -> Result<Value>;
+        let menu_builtins: [(&str, &str, &str, &str, Run); 5] = [
+            ("workbench.showCommands", "Show All Commands", "menubar/View", "Mod+Shift+P", |w, _| {
+                w.inner.bus.emit(HostEvent::ShowCommandPalette);
+                Ok(Value::Null)
+            }),
+            ("workbench.openSettings", "Open Settings", "menubar/File", "Mod+,", |w, _| {
+                w.open_panel(Panel::Settings);
+                Ok(Value::Null)
+            }),
+            ("workbench.newTerminal", "New Terminal", "menubar/View", "Mod+Shift+T", |_, _| Ok(Value::Null)),
+            ("workbench.togglePrimaryBar", "Toggle Primary Side Bar", "menubar/View", "Mod+B", |w, _| {
+                w.toggle_bar(BarId::Primary);
+                Ok(Value::Null)
+            }),
+            ("workbench.toggleSecondaryBar", "Toggle Secondary Side Bar", "menubar/View", "Mod+Alt+B", |w, _| {
+                w.toggle_bar(BarId::Secondary);
+                Ok(Value::Null)
+            }),
         ];
-        for (id, title, panel, menu, key) in builtins {
+        for (id, title, menu, key, run) in menu_builtins {
             let info = CommandInfo { id: id.to_owned(), title: title.to_owned(), category: None, source: None };
-            self.inner.commands.register(info, open_panel(&weak, panel))?;
+            self.inner.commands.register(info, builtin(run))?;
             self.inner.menus.add(menu, MenuEntry { command: id.to_owned(), group: None, order: 0, source: None });
             self.inner.keybindings.register(Keybinding { key: key.to_owned(), command: id.to_owned(), source: None });
         }
 
         // Not in any menu: it needs a path, so it is for view items and other callers with one.
-        let inner = weak.clone();
-        let open_file = CommandTarget::Builtin(Arc::new(move |args| {
-            let inner = inner.upgrade();
-            Box::pin(async move {
-                let Some(path) = args.first().and_then(Value::as_str) else {
-                    return Err(Error::Other("workbench.openFile expects a file path".to_owned()));
-                };
-                if let Some(inner) = inner {
-                    inner.bus.emit(HostEvent::OpenPanel { panel: "editor".to_owned(), arg: Some(path.to_owned()) });
-                }
-                Ok(Value::Null)
-            })
-        }));
+        let open_file: Run = |w, args| {
+            let Some(path) = args.first().and_then(Value::as_str) else {
+                return Err(Error::Other("workbench.openFile expects a file path".to_owned()));
+            };
+            w.open_panel(Panel::Editor { path: path.to_owned() });
+            Ok(Value::Null)
+        };
         let info = CommandInfo {
             id: "workbench.openFile".to_owned(),
             title: "Open File".to_owned(),
             category: None,
             source: None,
         };
-        self.inner.commands.register(info, open_file)?;
+        self.inner.commands.register(info, builtin(open_file))?;
 
+        let bar_position = |default: &str, which: &str| {
+            json!({
+                "type": "string",
+                "enum": ["left", "right", "top"],
+                "default": default,
+                "description": format!("Where the {which} side bar is docked.")
+            })
+        };
         let properties = BTreeMap::from([
+            (PRIMARY_POSITION.to_owned(), bar_position("left", "primary")),
+            (SECONDARY_POSITION.to_owned(), bar_position("right", "secondary")),
             (
                 "workbench.colorTheme".to_owned(),
                 json!({

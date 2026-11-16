@@ -14,6 +14,8 @@ pub enum Error {
     UnknownContainer(String),
     #[error("view container already registered: {0}")]
     DuplicateContainer(String),
+    #[error("no such panel is open: {0}")]
+    UnknownPanel(String),
     #[error("unknown plugin: {0}")]
     UnknownPlugin(String),
     #[error("unknown setting: {0}")]

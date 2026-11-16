@@ -4,6 +4,7 @@ use serde::Serialize;
 use skele_protocol::methods::MessageLevel;
 use tokio::sync::broadcast;
 
+use crate::layout::Layout;
 use crate::plugin::PluginState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -28,12 +29,12 @@ pub enum HostEvent {
     ConfigChanged {
         keys: Vec<String>,
     },
-    /// A built-in command asks the front end to reveal one of its panels.
-    /// `arg` qualifies it where that makes sense: the path for `editor`.
-    OpenPanel {
-        panel: String,
-        arg: Option<String>,
+    /// The bars or open panels changed; this is the whole new layout.
+    LayoutChanged {
+        layout: Layout,
     },
+    /// Open the command palette overlay.
+    ShowCommandPalette,
     PluginState {
         plugin_id: String,
         state: PluginState,

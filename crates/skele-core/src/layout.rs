@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use skele_protocol::manifest::BarId;
 
 use crate::containers::ContainerInfo;
+use crate::events::HostEvent;
+use crate::{Error, Result, Workbench};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -150,6 +152,105 @@ impl Layout {
             }
         }
         changed
+    }
+}
+
+/// Settings that place the bars.
+pub const PRIMARY_POSITION: &str = "workbench.primaryBar.position";
+pub const SECONDARY_POSITION: &str = "workbench.secondaryBar.position";
+
+impl Workbench {
+    pub fn layout(&self) -> Layout {
+        self.inner.layout.lock().unwrap().clone()
+    }
+
+    /// Applies `change` and emits `LayoutChanged` if the layout differs afterwards.
+    fn update_layout<R>(&self, change: impl FnOnce(&mut Layout) -> R) -> R {
+        let (result, changed) = {
+            let mut layout = self.inner.layout.lock().unwrap();
+            let before = layout.clone();
+            let result = change(&mut layout);
+            (result, (*layout != before).then(|| layout.clone()))
+        };
+        if let Some(layout) = changed {
+            self.inner.bus.emit(HostEvent::LayoutChanged { layout });
+        }
+        result
+    }
+
+    /// Opens a panel, or reveals the open one with the same id.
+    pub fn open_panel(&self, panel: Panel) {
+        self.update_layout(|layout| layout.open(panel));
+    }
+
+    /// Closes a panel; closing a terminal panel also ends its shell.
+    pub fn close_panel(&self, id: &str) -> Result<()> {
+        let closed = self.update_layout(|layout| layout.close(id));
+        match closed {
+            Some(Panel::Terminal { id }) => self.inner.terminals.close(id),
+            Some(_) => {}
+            None => return Err(Error::UnknownPanel(id.to_owned())),
+        }
+        Ok(())
+    }
+
+    pub fn set_active_panel(&self, id: &str) -> Result<()> {
+        if self.update_layout(|layout| layout.activate(id)) {
+            Ok(())
+        } else {
+            Err(Error::UnknownPanel(id.to_owned()))
+        }
+    }
+
+    /// Opens a container's side panel on `bar`, or collapses the bar's panel with `None`.
+    pub fn set_active_container(&self, bar: BarId, id: Option<String>) -> Result<()> {
+        if let Some(id) = &id {
+            if self.inner.containers.get(id).is_none_or(|c| c.bar != bar) {
+                return Err(Error::UnknownContainer(id.clone()));
+            }
+        }
+        self.update_layout(|layout| layout.bar_mut(bar).active_container = id);
+        Ok(())
+    }
+
+    /// Shows a bar if hidden and opens the container's side panel.
+    pub(crate) fn focus_container(&self, bar: BarId, id: &str) -> Result<()> {
+        if self.inner.containers.get(id).is_none_or(|c| c.bar != bar) {
+            return Err(Error::UnknownContainer(id.to_owned()));
+        }
+        self.update_layout(|layout| {
+            let bar = layout.bar_mut(bar);
+            bar.visible = true;
+            bar.active_container = Some(id.to_owned());
+        });
+        Ok(())
+    }
+
+    pub fn toggle_bar(&self, bar: BarId) {
+        self.update_layout(|layout| {
+            let bar = layout.bar_mut(bar);
+            bar.visible = !bar.visible;
+        });
+    }
+
+    /// Re-reads both position settings into the layout.
+    pub(crate) fn apply_bar_settings(&self) {
+        let read = |key| self.inner.config.get(key).as_str().and_then(BarPosition::from_setting);
+        let (primary, secondary) = (read(PRIMARY_POSITION), read(SECONDARY_POSITION));
+        self.update_layout(|layout| {
+            if let Some(position) = primary {
+                layout.primary.position = position;
+            }
+            if let Some(position) = secondary {
+                layout.secondary.position = position;
+            }
+        });
+    }
+
+    /// Repairs active containers after containers were added or removed.
+    pub(crate) fn fix_layout_containers(&self) {
+        let containers = self.inner.containers.list();
+        self.update_layout(|layout| layout.fix_containers(&containers));
     }
 }
 
