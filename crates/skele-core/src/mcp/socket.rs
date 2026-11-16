@@ -32,8 +32,14 @@ impl McpListener {
     /// Listens on a new socket and serves every connection that presents a live grant.
     pub(crate) fn start(workbench: &Workbench) -> Result<Self> {
         let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let file = format!("openskele-{}-{n}.sock", std::process::id());
-        let path = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join(file);
+        let mut nonce = [0u8; 8];
+        getrandom::fill(&mut nonce).map_err(|e| Error::Other(format!("random: {e}")))?;
+        let nonce: String = nonce.iter().map(|b| format!("{b:02x}")).collect();
+        let name = format!("openskele-{}-{n}-{nonce}", std::process::id());
+        let base = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir);
+        let path = private_dir(&base.join(name))
+            .map(|dir| dir.join("mcp.sock"))
+            .map_err(|e| Error::Other(format!("mcp socket folder under {}: {e}", base.display())))?;
         let listener = listen(&path).map_err(|e| Error::Other(format!("mcp socket {}: {e}", path.display())))?;
 
         let weak: Weak<Inner> = Arc::downgrade(&workbench.inner);
@@ -51,10 +57,14 @@ impl McpListener {
         &self.path
     }
 
-    /// Stops accepting and removes the socket file.
+    /// Stops accepting and removes the socket and its folder.
     pub fn close(&self) {
         self.accept.abort();
         let _ = std::fs::remove_file(&self.path);
+        #[cfg(unix)]
+        if let Some(dir) = self.path.parent() {
+            let _ = std::fs::remove_dir(dir);
+        }
     }
 }
 
@@ -64,19 +74,40 @@ impl Drop for McpListener {
     }
 }
 
+/// A new folder only the owner can enter (0700), with an unguessable name, so
+/// no other user can reach, pre-create or squat the socket inside it. This is
+/// what keeps the socket private on every Unix: macOS cannot set a socket's
+/// own mode.
+#[cfg(unix)]
+fn private_dir(dir: &Path) -> std::io::Result<PathBuf> {
+    use std::os::unix::fs::DirBuilderExt;
+    std::fs::DirBuilder::new().mode(0o700).create(dir)?;
+    Ok(dir.to_owned())
+}
+
+#[cfg(windows)]
+fn private_dir(dir: &Path) -> std::io::Result<PathBuf> {
+    // Named pipes live in their own namespace; the name alone is used.
+    Ok(dir.to_owned())
+}
+
 #[cfg(unix)]
 fn listen(path: &Path) -> std::io::Result<LocalSocketListener> {
     use interprocess::local_socket::GenericFilePath;
-    use interprocess::os::unix::local_socket::ListenerOptionsExt;
-    let _ = std::fs::remove_file(path);
-    // The mode is set before bind, so there is no moment the socket is open to others.
-    ListenerOptions::new().name(path.to_fs_name::<GenericFilePath>()?).mode(0o600).create_tokio()
+    let options = ListenerOptions::new().name(path.to_fs_name::<GenericFilePath>()?);
+    // On Linux the socket itself is 0600 as well, set before bind (no umask race).
+    #[cfg(target_os = "linux")]
+    let options = {
+        use interprocess::os::unix::local_socket::ListenerOptionsExt;
+        options.mode(0o600)
+    };
+    options.create_tokio()
 }
 
 #[cfg(windows)]
 fn listen(path: &Path) -> std::io::Result<LocalSocketListener> {
     use interprocess::local_socket::GenericNamespaced;
-    let name = path.file_name().unwrap().to_string_lossy().into_owned();
+    let name = path.parent().and_then(Path::file_name).unwrap().to_string_lossy().into_owned();
     ListenerOptions::new().name(name.to_ns_name::<GenericNamespaced>()?).create_tokio()
 }
 

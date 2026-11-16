@@ -195,7 +195,7 @@ fn table() -> Vec<(&'static str, &'static str, Value, bool, bool, Run)> {
                 &["key", "value"],
             ),
             false,
-            false,
+            true,
             |w, a| Box::pin(async move {
                 let a: ConfigSetArgs = args(a)?;
                 let value = (!a.value.is_null()).then_some(a.value);
@@ -236,7 +236,7 @@ fn table() -> Vec<(&'static str, &'static str, Value, bool, bool, Run)> {
                 &["uri", "start", "end", "text"],
             ),
             false,
-            false,
+            true,
             |w, a| Box::pin(async move {
                 let a: EditArgs = args(a)?;
                 json_result(json!({ "version": w.documents().edit(&a.uri, a.start, a.end, &a.text)? }))
@@ -403,8 +403,8 @@ mod tests {
             ("command_execute", false, true),
             ("config_get", true, false),
             ("config_list", true, false),
-            ("config_set", false, false),
-            ("document_edit", false, false),
+            ("config_set", false, true),
+            ("document_edit", false, true),
             ("document_open", false, false),
             ("document_read", true, false),
             ("document_save", false, true),

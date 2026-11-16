@@ -99,8 +99,25 @@ async fn revoked_grant_closes_connection() {
     let client = connect(&workbench, &grant, &grant.token).await.unwrap();
     assert!(!text(&client, "layout_get", json!({})).await.0);
     workbench.grants().revoke(grant.id);
-    let after = client.call_tool(CallToolRequestParams::new("layout_get")).await;
-    assert!(after.is_err() || after.unwrap().is_error == Some(true));
+    // Revoking ends the connection at once, not at the next tool call: the
+    // bridge exits, so requests fail at the transport rather than with a reply.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    loop {
+        match client.list_all_tools().await {
+            Err(rmcp::ServiceError::TransportClosed) => break,
+            other => assert!(std::time::Instant::now() < deadline, "still connected after revoke: {other:?}"),
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+}
+
+#[tokio::test]
+async fn revoked_grant_cannot_list_tools() {
+    let workbench = Workbench::new(Default::default()).unwrap();
+    let grant = grant(&workbench, "a");
+    let client = connect(&workbench, &grant, &grant.token).await.unwrap();
+    workbench.grants().revoke(grant.id);
+    assert!(client.list_all_tools().await.is_err());
 }
 
 #[tokio::test]
@@ -133,8 +150,17 @@ async fn socket_is_private() {
     use std::os::unix::fs::PermissionsExt;
     let workbench = Workbench::new(Default::default()).unwrap();
     let listener = workbench.mcp().await.unwrap();
-    let mode = std::fs::metadata(listener.path()).unwrap().permissions().mode();
-    assert_eq!(mode & 0o777, 0o600);
+    // The socket lives in a folder of its own that only the owner can enter,
+    // which works on every Unix, whether or not the socket's own mode can be set.
+    let dir = listener.path().parent().unwrap().to_owned();
+    assert!(dir.file_name().unwrap().to_string_lossy().starts_with("openskele-"), "{}", dir.display());
+    assert_eq!(std::fs::metadata(&dir).unwrap().permissions().mode() & 0o777, 0o700);
+    #[cfg(target_os = "linux")]
+    assert_eq!(std::fs::metadata(listener.path()).unwrap().permissions().mode() & 0o777, 0o600);
+    let path = listener.path().to_owned();
+    drop(listener);
+    drop(workbench);
+    assert!(!dir.exists() && !path.exists(), "socket folder left behind");
 }
 
 #[tokio::test]

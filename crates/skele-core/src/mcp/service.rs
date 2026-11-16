@@ -38,6 +38,18 @@ fn to_mcp(info: ToolInfo) -> Result<Tool> {
     Ok(tool)
 }
 
+impl Service {
+    /// Revocation normally ends the connection at once; this covers a request
+    /// that arrives in between.
+    fn check_grant(&self) -> std::result::Result<(), ErrorData> {
+        if self.workbench.grants().check(&self.grant.token).is_some() {
+            return Ok(());
+        }
+        self.revoked.notify_one();
+        Err(ErrorData::invalid_request("this connection's grant was revoked", None))
+    }
+}
+
 impl ServerHandler for Service {
     fn get_info(&self) -> ServerConfig {
         InitializeResult::new(ServerCapabilities::builder().enable_tools().build())
@@ -48,6 +60,7 @@ impl ServerHandler for Service {
         _request: Option<PaginatedRequestParams>,
         _context: RequestContext<RoleServer>,
     ) -> std::result::Result<ListToolsResult, ErrorData> {
+        self.check_grant()?;
         let tools = self.workbench.tools().list().into_iter().filter_map(|info| to_mcp(info).ok()).collect();
         Ok(ListToolsResult::with_all_items(tools))
     }
@@ -57,11 +70,7 @@ impl ServerHandler for Service {
         request: CallToolRequestParams,
         _context: RequestContext<RoleServer>,
     ) -> std::result::Result<CallToolResponse, ErrorData> {
-        // Revoking a grant must stop a connection that is already open.
-        if self.workbench.grants().check(&self.grant.token).is_none() {
-            self.revoked.notify_one();
-            return Err(ErrorData::invalid_request("this connection's grant was revoked", None));
-        }
+        self.check_grant()?;
         let arguments = Value::Object(request.arguments.unwrap_or_default());
         match self.workbench.call_tool(&request.name, arguments, &self.grant).await {
             Ok(result) => {
@@ -84,6 +93,25 @@ where
     W: AsyncWrite + Send + Unpin + 'static,
 {
     let revoked = Arc::new(Notify::new());
+    // Revoking the grant ends this connection without waiting for its next request.
+    let mut revocations = workbench.grants().revocations();
+    let (watch, id, token) = (workbench.clone(), grant.id, grant.token.clone());
+    let signal = revoked.clone();
+    tokio::spawn(async move {
+        loop {
+            match revocations.recv().await {
+                Ok(revoked) if revoked == id => break,
+                Ok(_) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    if watch.grants().check(&token).is_none() {
+                        break;
+                    }
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+            }
+        }
+        signal.notify_one();
+    });
     let service = Service { workbench, grant, revoked: revoked.clone() };
     let running = service.serve((reader, writer)).await.map_err(|e| Error::Other(format!("mcp: {e}")))?;
     let cancel = running.cancellation_token();
@@ -104,6 +132,24 @@ mod tests {
 
     use crate::grants::GrantKind;
     use crate::Workbench;
+
+    #[tokio::test]
+    async fn revoking_ends_serve() {
+        let workbench = Workbench::new(Default::default()).unwrap();
+        let grant = workbench.grants().issue(GrantKind::AgentSession { session_id: "s".into() }, "test");
+        let (server_end, client_end) = tokio::io::duplex(64 * 1024);
+        let (r, w) = tokio::io::split(server_end);
+        let server = tokio::spawn(super::serve(workbench.clone(), grant.clone(), r, w));
+        let (r, w) = tokio::io::split(client_end);
+        let client = ().serve((r, w)).await.unwrap();
+        client.list_all_tools().await.unwrap();
+        workbench.grants().revoke(grant.id);
+        let ended = tokio::time::timeout(std::time::Duration::from_secs(3), server).await;
+        assert!(ended.is_ok(), "serve kept running after revoke");
+        // The connection is gone, not merely refusing: requests fail at the transport.
+        let after = client.list_all_tools().await;
+        assert!(matches!(after, Err(rmcp::ServiceError::TransportClosed)), "{after:?}");
+    }
 
     #[tokio::test]
     async fn serves_over_duplex() {

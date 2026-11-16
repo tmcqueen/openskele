@@ -10,15 +10,19 @@ use tokio::io::AsyncWriteExt;
 const SOCKET_ENV: &str = "SKELE_MCP_SOCKET";
 const TOKEN_ENV: &str = "SKELE_MCP_TOKEN";
 
-#[tokio::main(flavor = "current_thread")]
-async fn main() -> ExitCode {
-    match run().await {
-        Ok(()) => ExitCode::SUCCESS,
+fn main() -> ExitCode {
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().expect("tokio runtime");
+    let code = match runtime.block_on(run()) {
+        Ok(()) => 0,
         Err(message) => {
             eprintln!("skele-mcp-bridge: {message}");
-            ExitCode::FAILURE
+            1
         }
-    }
+    };
+    // Exit now: reading stdin blocks a thread that a normal runtime shutdown
+    // would wait for, and the agent keeps stdin open. Without this the bridge
+    // outlives the connection it served.
+    std::process::exit(code);
 }
 
 async fn run() -> Result<(), String> {

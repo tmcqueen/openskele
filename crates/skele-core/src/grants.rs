@@ -42,10 +42,21 @@ impl std::fmt::Debug for Grant {
     }
 }
 
-#[derive(Default)]
 pub struct GrantStore {
     by_token: Mutex<HashMap<String, Grant>>,
     next_id: AtomicU64,
+    /// Ids of revoked grants, so connections using them can end at once.
+    revoked: tokio::sync::broadcast::Sender<u64>,
+}
+
+impl Default for GrantStore {
+    fn default() -> Self {
+        Self {
+            by_token: Default::default(),
+            next_id: Default::default(),
+            revoked: tokio::sync::broadcast::channel(64).0,
+        }
+    }
 }
 
 fn new_token() -> String {
@@ -86,6 +97,13 @@ impl GrantStore {
 
     pub fn revoke(&self, id: u64) {
         self.by_token.lock().unwrap().retain(|_, g| g.id != id);
+        let _ = self.revoked.send(id);
+    }
+
+    /// Ids of grants as they are revoked. A lagging receiver should re-check
+    /// its grant with [`check`](Self::check).
+    pub fn revocations(&self) -> tokio::sync::broadcast::Receiver<u64> {
+        self.revoked.subscribe()
     }
 
     /// Number of grants issued and not revoked, expired ones included.
