@@ -18,10 +18,16 @@ pub enum HostEvent {
         message: String,
         source: Option<String>,
     },
-    /// Text for a named output terminal.
-    TerminalData {
-        terminal: String,
-        data: String,
+    /// Text was written to an output channel.
+    OutputAppended {
+        channel: String,
+        text: String,
+    },
+    /// An output channel was created; re-list them.
+    OutputChannelsChanged,
+    /// An output channel was emptied.
+    OutputCleared {
+        channel: String,
     },
     ViewRefresh {
         view_id: String,

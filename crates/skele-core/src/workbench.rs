@@ -19,6 +19,7 @@ use crate::events::{EventBus, HostEvent};
 use crate::keybindings::{Keybinding, KeybindingRegistry};
 use crate::layout::{Layout, Panel, PRIMARY_POSITION, SECONDARY_POSITION};
 use crate::menus::{Menu, MenuEntry, MenuRegistry};
+use crate::output::{OutputStore, WORKBENCH_CHANNEL};
 use crate::plugin::{PluginInfo, PluginManager};
 use crate::pty::TerminalManager;
 use crate::views::{ViewInfo, ViewRegistry};
@@ -59,6 +60,7 @@ pub(crate) struct Inner {
     pub(crate) plugins: PluginManager,
     pub(crate) terminals: TerminalManager,
     pub(crate) documents: DocumentStore,
+    pub(crate) output: OutputStore,
     pub(crate) workspace: Option<PathBuf>,
 }
 
@@ -84,9 +86,11 @@ impl Workbench {
                 plugins: Default::default(),
                 terminals: Default::default(),
                 documents: Default::default(),
+                output: Default::default(),
                 workspace: options.workspace,
             }),
         };
+        workbench.inner.output.append(WORKBENCH_CHANNEL, "");
         workbench.register_builtins()?;
         workbench.apply_bar_settings();
         Ok(workbench)

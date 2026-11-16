@@ -72,7 +72,7 @@ async fn host_and_sample_plugin_round_trip() {
     let reply = workbench.execute_command("hello.greet", vec![json!("args")]).await.unwrap();
     assert_eq!(reply, json!("AHOY, ARGS!"));
     let written = expect(&mut events, |e| match e {
-        HostEvent::TerminalData { terminal, data } if terminal == "Hello" => Some(data.clone()),
+        HostEvent::OutputAppended { channel, text } if channel == "Hello" => Some(text.clone()),
         _ => None,
     })
     .await;

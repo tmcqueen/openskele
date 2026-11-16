@@ -44,7 +44,7 @@ async fn host_and_dotnet_plugin_round_trip() {
     assert_eq!(state(&workbench, PLUGIN), PluginState::Running);
 
     let written = expect(&mut events, |e| match e {
-        HostEvent::TerminalData { terminal, data } if terminal == "Runtime Info" => Some(data.clone()),
+        HostEvent::OutputAppended { channel, text } if channel == "Runtime Info" => Some(text.clone()),
         _ => None,
     })
     .await;
@@ -81,7 +81,7 @@ async fn host_and_dotnet_plugin_round_trip() {
     while events.try_recv().is_ok() {}
     workbench.save_document(&document.uri).unwrap();
     let written = expect(&mut events, |e| match e {
-        HostEvent::TerminalData { data, .. } => Some(data.clone()),
+        HostEvent::OutputAppended { text, .. } => Some(text.clone()),
         _ => None,
     })
     .await;
