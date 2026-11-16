@@ -146,10 +146,10 @@ mod scripted {
         let plans: Vec<_> = transcript.entries.iter().filter(|e| matches!(e, Entry::Plan { .. })).collect();
         assert_eq!(plans.len(), 1, "a plan update replaces the plan");
         let Entry::Plan { entries } = plans[0] else { unreachable!() };
-        assert_eq!(entries.iter().map(|e| (e.content.as_str(), e.status.as_str())).collect::<Vec<_>>(), [
-            ("Read", "completed"),
-            ("Edit", "completed")
-        ]);
+        assert_eq!(
+            entries.iter().map(|e| (e.content.as_str(), e.status.as_str())).collect::<Vec<_>>(),
+            [("Read", "completed"), ("Edit", "completed")]
+        );
         workbench.close_agent_session(&session).await;
     }
 
@@ -202,5 +202,128 @@ mod scripted {
     async fn unknown_agent_errors() {
         let workbench = Workbench::new(Default::default()).unwrap();
         assert!(matches!(workbench.new_agent_session("nope").await, Err(skele_core::Error::UnknownAgent(_))));
+    }
+
+    /// Starts `ask` in the background and returns the permission request's id once it shows up.
+    async fn ask(
+        workbench: &Workbench,
+        session: &str,
+    ) -> (tokio::task::JoinHandle<skele_core::Result<StopReason>>, String) {
+        let mut events = workbench.bus().subscribe();
+        let (w, s) = (workbench.clone(), session.to_owned());
+        let prompt = tokio::spawn(async move { w.agent_prompt(&s, "ask".into()).await });
+        let id = tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                if let Ok(HostEvent::AgentUpdate { entry: Entry::PermissionRequest { id, answer: None, .. }, .. }) =
+                    events.recv().await
+                {
+                    return id;
+                }
+            }
+        })
+        .await
+        .expect("no permission request");
+        (prompt, id)
+    }
+
+    /// The prompt's stop reason, failing (not hanging) if the turn never ends.
+    async fn finish(prompt: tokio::task::JoinHandle<skele_core::Result<StopReason>>) -> StopReason {
+        tokio::time::timeout(Duration::from_secs(10), prompt).await.expect("the turn never ended").unwrap().unwrap()
+    }
+
+    fn answer_of(workbench: &Workbench, session: &str, request: &str) -> Option<String> {
+        workbench.agent_transcript(session).unwrap().entries.into_iter().find_map(|e| match e {
+            Entry::PermissionRequest { id, answer, .. } if id == request => answer,
+            _ => None,
+        })
+    }
+
+    #[tokio::test]
+    async fn ask_allow() {
+        let Some(workbench) = setup() else { return };
+        let session = workbench.new_agent_session("scripted").await.unwrap();
+        let (prompt, request) = ask(&workbench, &session).await;
+        workbench.agent_answer_permission(&session, &request, Some("allow".into())).unwrap();
+        assert_eq!(finish(prompt).await, StopReason::EndTurn);
+        assert_eq!(texts(&workbench.agent_transcript(&session).unwrap().entries), ["Allowed."]);
+        assert_eq!(answer_of(&workbench, &session, &request).as_deref(), Some("allow"));
+        workbench.close_agent_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn ask_reject() {
+        let Some(workbench) = setup() else { return };
+        let session = workbench.new_agent_session("scripted").await.unwrap();
+        let (prompt, request) = ask(&workbench, &session).await;
+        workbench.agent_answer_permission(&session, &request, Some("reject".into())).unwrap();
+        assert_eq!(finish(prompt).await, StopReason::EndTurn);
+        assert_eq!(texts(&workbench.agent_transcript(&session).unwrap().entries), ["Rejected."]);
+        workbench.close_agent_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn cancel_while_permission_pending() {
+        let Some(workbench) = setup() else { return };
+        let session = workbench.new_agent_session("scripted").await.unwrap();
+        let (prompt, request) = ask(&workbench, &session).await;
+        workbench.agent_cancel(&session).await.unwrap();
+        assert_eq!(finish(prompt).await, StopReason::Cancelled);
+        assert_eq!(answer_of(&workbench, &session, &request).as_deref(), Some("cancelled"));
+        workbench.close_agent_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn answer_twice_or_unknown_is_error() {
+        let Some(workbench) = setup() else { return };
+        let session = workbench.new_agent_session("scripted").await.unwrap();
+        let (prompt, request) = ask(&workbench, &session).await;
+        workbench.agent_answer_permission(&session, &request, Some("allow".into())).unwrap();
+        finish(prompt).await;
+        let before = workbench.agent_transcript(&session).unwrap();
+        let again = workbench.agent_answer_permission(&session, &request, Some("reject".into()));
+        assert!(matches!(again, Err(skele_core::Error::UnknownPermissionRequest(_))));
+        let unknown = workbench.agent_answer_permission(&session, "nope", None);
+        assert!(matches!(unknown, Err(skele_core::Error::UnknownPermissionRequest(_))));
+        assert_eq!(workbench.agent_transcript(&session).unwrap(), before);
+        workbench.close_agent_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn agent_crash_mid_prompt() {
+        let Some(workbench) = setup() else { return };
+        let mut events = workbench.bus().subscribe();
+        let session = workbench.new_agent_session("scripted").await.unwrap();
+        assert_eq!(workbench.grants().len(), 1);
+        let stop = tokio::time::timeout(Duration::from_secs(10), workbench.agent_prompt(&session, "crash".into()))
+            .await
+            .expect("the prompt never ended")
+            .unwrap();
+        assert_eq!(stop, StopReason::Error);
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                if let Ok(HostEvent::AgentSessionEnded { session: s, .. }) = events.recv().await {
+                    if s == session {
+                        return;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("no AgentSessionEnded");
+        assert_eq!(workbench.grants().len(), 0);
+        assert!(workbench.agent_transcript(&session).is_err(), "the ended session is gone");
+    }
+
+    #[tokio::test]
+    async fn close_session_revokes_grant() {
+        let Some(workbench) = setup() else { return };
+        let session = workbench.new_agent_session("scripted").await.unwrap();
+        assert_eq!(workbench.grants().len(), 1);
+        workbench.close_agent_session(&session).await;
+        assert_eq!(workbench.grants().len(), 0);
+        assert!(matches!(
+            workbench.agent_prompt(&session, "hello".into()).await,
+            Err(skele_core::Error::UnknownAgentSession(_))
+        ));
     }
 }
