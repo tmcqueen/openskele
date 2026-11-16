@@ -10,6 +10,7 @@ import { commands, connect, onHostEvent, run, type Layout, type PluginState, typ
 import { chordOf, normalizeChord } from "./keys";
 import { createMainArea, loadedEditor, OUTPUT, type MainArea } from "./layout";
 import { closePalette, togglePalette } from "./palette";
+import { createOutputPanel } from "./renderers/output";
 import { createOutput, createPtyTerminal, retheme as rethemeTerminals, setFont } from "./renderers/terminal";
 import { createTree, type Tree } from "./renderers/tree";
 import { createSettings, type SettingsPane } from "./settings";
@@ -27,7 +28,12 @@ let settings: SettingsPane | undefined;
 let titleBar: TitleBar | undefined;
 const trees = new Map<string, Tree>();
 const pluginStates = new Map<string, PluginState>();
-const output = createOutput();
+// Created at load so it follows output from the start; the Output panel shows it when open.
+const output = createOutputPanel(
+  { channels: () => commands.outputChannels(), read: (c) => commands.outputRead(c), clear: async (c) => void (await commands.outputClear(c)) },
+  createOutput(),
+  globalThis.localStorage,
+);
 
 /** A container's side panel: each of its views under a heading. */
 function createContainer(containerId: string): IContentRenderer {
@@ -183,8 +189,14 @@ async function start(): Promise<void> {
       case "message":
         toast(event.level, event.message, event.source);
         break;
-      case "terminalData":
-        output.write(event.data);
+      case "outputAppended":
+        output.append(event.channel, event.text);
+        break;
+      case "outputChannelsChanged":
+        void output.channelsChanged();
+        break;
+      case "outputCleared":
+        output.cleared(event.channel);
         break;
       case "viewRefresh":
         void trees.get(event.viewId)?.refresh();

@@ -633,3 +633,48 @@ body {
   text-transform: uppercase;
   color: var(--muted);
 }
+
+/* Output panel: channel picker and Clear above the text. */
+.output-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.output-panel > .term-host {
+  flex: 1;
+  min-height: 0;
+}
+
+.output-header {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.output-channel {
+  min-width: 160px;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel);
+  color: var(--text);
+}
+
+.output-clear {
+  display: flex;
+  padding: 3px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.output-clear:hover {
+  background: var(--hover);
+  color: var(--text);
+}

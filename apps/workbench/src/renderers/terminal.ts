@@ -87,9 +87,10 @@ function surface(options: { readOnly: boolean }): Surface {
   return self;
 }
 
-export function createOutput(): { element: HTMLElement; write(data: string): void } {
+/** A read-only surface for output text. */
+export function createOutput(): { element: HTMLElement; write(data: string): void; reset(): void } {
   const { element, terminal } = surface({ readOnly: true });
-  return { element, write: (data) => terminal.write(data) };
+  return { element, write: (data) => terminal.write(data), reset: () => terminal.reset() };
 }
 
 /**

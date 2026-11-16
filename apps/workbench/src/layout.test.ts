@@ -2,10 +2,7 @@
 // what the webview asks of the host, and that it never shows panels the host
 // does not have.
 
-import { GlobalRegistrator } from "@happy-dom/global-registrator";
 import { beforeEach, expect, mock, test } from "bun:test";
-
-GlobalRegistrator.register();
 
 const calls: string[] = [];
 mock.module("./host", () => ({
