@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix the five peer-review bugs (#3–#7) so the webview, IPC and native menu change layout and report errors only through the Rust core.
+**Goal:** Fix the five peer-review bugs (#3–#7) so the webview, IPC and native menu change layout and report errors only through the Rust core, and fix the nine CodeRabbit findings on PR #1 (M2's tools and MCP server).
 
-**Architecture:** Each fix moves a decision the webview or an IPC command makes on its own back into `skele-core`: panel closes wait for the core (#3), views load when the core's layout shows them (#4), initial panels are set by the host once (#5), terminals close only through the layout (#6), and failed commands are reported through `Workbench::notify` (#7).
+**Architecture:** Tasks 1–5 each move a decision the webview or an IPC command makes on its own back into `skele-core`: panel closes wait for the core (#3), views load when the core's layout shows them (#4), initial panels are set by the host once (#5), terminals close only through the layout (#6), and failed commands are reported through `Workbench::notify` (#7). Tasks 6–9 fix the MCP server's connection lifecycle, keep open editors in step with agent edits, reject tool schemas MCP cannot call, and make the bridge and tests portable to Windows.
 
 **Tech Stack:** Rust (`skele-core`, `tauri-plugin-skele`), TypeScript webview on Dockview 8.9, `bun test` with happy-dom.
 
-**Spec:** GitHub issues [#3](https://github.com/tmcqueen/openskele/issues/3), [#4](https://github.com/tmcqueen/openskele/issues/4), [#5](https://github.com/tmcqueen/openskele/issues/5), [#6](https://github.com/tmcqueen/openskele/issues/6), [#7](https://github.com/tmcqueen/openskele/issues/7) (each has acceptance criteria), plus `docs/adr/0001-ui-state-owned-by-rust.md`, `0007-plugins-are-sidecar-processes.md` and `0012-output-channels-in-the-core.md`. All five were confirmed still present at `origin/m3-agent-interface` (`4643df9`).
+**Spec:** GitHub issues [#3](https://github.com/tmcqueen/openskele/issues/3), [#4](https://github.com/tmcqueen/openskele/issues/4), [#5](https://github.com/tmcqueen/openskele/issues/5), [#6](https://github.com/tmcqueen/openskele/issues/6), [#7](https://github.com/tmcqueen/openskele/issues/7) (each has acceptance criteria), plus `docs/adr/0001-ui-state-owned-by-rust.md`, `0007-plugins-are-sidecar-processes.md` and `0012-output-channels-in-the-core.md`. All five were confirmed still present at `origin/m3-agent-interface` (`4643df9`). CodeRabbit's review of [PR #1](https://github.com/tmcqueen/openskele/pull/1) at `f6cb166`: nine inline comments, all verified as valid; M3 changes none of the flagged files except `workbench.rs` (shutdown now revokes agent grants first, which softens finding 3).
 
 **Base:** `main` after `m3-agent-interface` (which contains `m2-tools-mcp`) is merged. Line numbers below are at `4643df9`.
 
@@ -20,7 +20,9 @@
 - Agent tools keep calling `Workbench::execute_command` directly: a failed `command_execute` tool call returns its error to the agent and does not notify the user.
 - No Dockview tab context menu: do not set `getTabContextMenuItems` (absent means no menu in 8.9).
 - Each task ends green on: `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `bun run typecheck`, `bun run --cwd apps/workbench test`, and `bun run gen:bindings && git diff --exit-code apps/workbench/src/bindings.ts` after the task's own binding change is committed.
-- Each task's commit message ends with `(closes #N)`.
+- Each task's commit message ends with `(closes #N)`; Tasks 6–9 instead name the CodeRabbit findings they fix (`CR1`–`CR9`, numbered as in each task).
+- MCP requires a tool's `inputSchema` to be a JSON Schema whose `type` is `"object"`.
+- The bridge (`crates/skele-mcp-bridge`) keeps no dependency on `skele-core` outside `[dev-dependencies]`.
 
 ## Review Focus
 
@@ -139,7 +141,93 @@
 - [ ] **Step 4:** Run the Global Constraints checks — PASS.
 - [ ] **Step 5: Commit** — `git commit -m "workbench: tab closes wait for the host's layout (closes #3)"`
 
-### Task 6: End-to-end check and docs
+### Task 6: MCP connection lifecycle (CR1, CR2, CR3, CR6, CR9)
+
+Findings: [CR1](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542589) watcher tasks outlive their connection; [CR2](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542610) revocation is not seen during initialization; [CR3](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542631) shutdown leaves connection handlers running; [CR6](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542689) a closed listener stays cached; [CR9](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542729) the revocation test passes without the watcher.
+
+**Files:**
+- Modify: `crates/skele-core/src/mcp/service.rs:90-128` (`serve`), `crates/skele-core/src/mcp/socket.rs` (`McpListener`, `handle`), `crates/skele-core/src/mcp/mod.rs:44-47` (`Workbench::mcp`), `crates/skele-core/src/workbench.rs` (`Inner.mcp`, `shutdown`)
+- Test: `crates/skele-core/src/mcp/service.rs` tests, `crates/skele-mcp-bridge/tests/bridge.rs` (`revoked_grant_closes_connection`, line ~96)
+
+**Interfaces:**
+- Produces: `serve(workbench, grant, reader, writer, stop: CancellationToken) -> Result<()>` (`tokio_util::sync::CancellationToken`, already a dependency via `tokio-util`). One token per connection, created before `serve_with_ct`, is cancelled by the revocation watcher, by `stop`, and when the connection ends; the watcher is a single task that `select!`s on revocations and the token, so it ends with the connection. Initialization runs under the token, so revoking during it ends the connection.
+- Produces: `McpListener` owns a listener-wide `CancellationToken` (each handler gets a child) and a `tokio::task::JoinSet` of handlers. `pub async fn close(&self)` cancels the token, aborts accepting, waits for every handler to finish, then removes the socket and folder. `Drop` still cancels and removes files without waiting.
+- Produces: `Inner.mcp: tokio::sync::Mutex<Option<Arc<McpListener>>>`. `Workbench::mcp()` starts and stores a listener when none is stored. `shutdown()` takes the stored listener and awaits `close()` after `close_agent_sessions()` and before `shutdown_plugins()`.
+
+- [ ] **Step 1: Failing tests**
+  - `service.rs` `disconnect_ends_the_watcher` (a unit test, so it can see `inner`): serve over `tokio::io::duplex`, drop the client end, await `serve`; then poll for up to 1 s until `Arc::strong_count(&workbench.inner) == 1`, which holds only once the watcher has dropped its `Workbench` clone.
+  - `service.rs` `revoke_during_initialize_ends_serve`: start `serve` on a duplex whose client never sends `initialize`; revoke the grant; `serve` returns within 2 s.
+  - `service.rs` `stop_token_ends_serve`: cancel `stop` on an initialized connection; `serve` returns within 2 s.
+  - `tests/mcp.rs` (new, in `skele-core`) `shutdown_waits_for_connections`: connect a client through `workbench.mcp()` (raw `interprocess` stream, token line, rmcp client over it), call `workbench.shutdown().await`; afterwards the client's `waiting()` completes within 2 s and the socket file is gone.
+  - `tests/mcp.rs` `mcp_after_shutdown_is_a_new_listener`: `mcp()`, `shutdown()`, `mcp()` again → a different path that exists.
+  - `bridge.rs` `revoked_grant_closes_connection`: after `revoke`, send nothing; `tokio::time::timeout(Duration::from_secs(5), client.waiting())` completes.
+- [ ] **Step 2:** `cargo test -p skele-core mcp && cargo test -p skele-core --test mcp && cargo test -p skele-mcp-bridge` — expected FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run the Global Constraints checks — PASS.
+- [ ] **Step 5: Commit** — `git commit -m "mcp: connections end with their grant, their peer or shutdown (CR1 CR2 CR3 CR6 CR9)"`
+
+### Task 7: Agent edits reach open editors; stale editor writes are refused (CR4)
+
+Finding: [CR4](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542641). M3 made ACP file writes emit `DocumentChanged`, but the MCP `document_edit` tool does not, and the editor's next debounced push sends its stale full buffer through `documentSetText`, erasing the tool's edit.
+
+**Files:**
+- Modify: `crates/skele-core/src/document.rs` (`set_text`), `crates/skele-core/src/workbench.rs` (new `edit_document`), `crates/skele-core/src/tools/builtin.rs:240-243`, `crates/skele-core/src/agent/session.rs:362-368` (`write_for_agent` uses the new method), `crates/skele-core/src/error.rs`
+- Modify: `crates/tauri-plugin-skele/src/commands.rs:172-174` (`document_set_text`), `apps/workbench/src/renderers/editor.ts`
+- Test: `crates/skele-core/src/document.rs` tests, `crates/skele-core/src/tools/builtin.rs` tests, `apps/workbench/src/renderers/editor.test.ts` (new; mock `monaco-editor` as `layout.test.ts` mocks the editor module)
+
+**Interfaces:**
+- Produces: `DocumentStore::set_text(&self, uri: &str, text: &str, base: Option<u32>) -> Result<u32>` — with `Some(base)`, `Err(Error::StaleDocument { uri: String, current: u32 })` when `base` is not the current version, and nothing changes. `None` replaces unconditionally; only `write_for_agent` passes `None`, after its own unsaved-edits check.
+- Produces: `Workbench::edit_document(&self, uri: &str, start: usize, end: usize, text: &str) -> Result<u32>` — `documents().edit(..)`, then emits `HostEvent::DocumentChanged { uri, version }`. The `document_edit` tool calls it.
+- Produces: IPC `document_set_text(uri, text, base: u32) -> Result<u32>`. The editor tracks the version it last synced (from `documentOpen`, each successful `documentSetText`, and each reload). A `StaleDocument` rejection reloads the editor from the host and shows `toast("warning", "<file> changed elsewhere; your last edit was not applied")`.
+
+- [ ] **Step 1: Failing tests**
+  - `document.rs` `stale_set_text_is_refused`: open (v1), `edit` (v2), `set_text(uri, "x", Some(1))` → `StaleDocument { current: 2, .. }`, text unchanged; `set_text(uri, "x", Some(2))` → `Ok(3)`; `set_text(uri, "y", None)` → `Ok(4)`.
+  - `builtin.rs` `document_edit_tells_editors`: subscribe, call `document_edit` → one `HostEvent::DocumentChanged` with the returned version.
+  - `editor.test.ts` `"a stale push reloads instead of overwriting"`: stub `documentSetText` to reject with a `StaleDocument` message once; type into the model, advance the debounce; expect `documentOpen` called again (reload) and the warning toast.
+- [ ] **Step 2:** `cargo test -p skele-core stale document_edit_tells && bun run --cwd apps/workbench test editor` — expected FAIL.
+- [ ] **Step 3:** Implement; `bun run gen:bindings`.
+- [ ] **Step 4:** Run the Global Constraints checks — PASS.
+- [ ] **Step 5: Commit** — `git commit -m "documents: agent edits reach editors; stale editor writes refused (CR4)"`
+
+### Task 8: Tool schemas must accept MCP arguments (CR5)
+
+Finding: [CR5](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542672). `{"type":"string"}` compiles, is advertised, and every call fails validation because MCP arguments are always an object.
+
+**Files:**
+- Modify: `crates/skele-core/src/tools/mod.rs:68-80` (`ToolRegistry::register`)
+- Test: `crates/skele-core/src/tools/mod.rs` tests, `crates/skele-core/tests/tools.rs`
+
+**Interfaces:**
+- Produces: `register` returns `Err(Error::InvalidSchema { key: <tool name>, message: "a tool's inputSchema must have \"type\": \"object\"" })` unless `input_schema["type"] == "object"`, checked before compiling. A plugin manifest with such a tool fails to install and leaves none of its contributions (existing rollback).
+
+- [ ] **Step 1: Failing tests**
+  - `tools/mod.rs` `non_object_schema_rejected`: `{"type":"string"}`, `{}` and `{"type":["object","null"]}` → `InvalidSchema`; `{"type":"object"}` → `Ok`.
+  - `tests/tools.rs` `plugin_with_non_object_tool_fails_install`: manifest tool with `{"type":"string"}` → install `Err`, plugin's commands absent.
+- [ ] **Step 2:** `cargo test -p skele-core non_object` — expected FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run the Global Constraints checks — PASS.
+- [ ] **Step 5: Commit** — `git commit -m "tools: inputSchema must be an object schema (CR5)"`
+
+### Task 9: Windows: one pipe name for listener and bridge; portable tests (CR7, CR8)
+
+Findings: [CR7](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542698) `sample_plugin.rs` uses `std::os::unix` unconditionally; [CR8](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542715) the listener names its pipe after the socket's folder and the bridge after the file (`mcp.sock`).
+
+**Files:**
+- Modify: `crates/skele-core/src/mcp/socket.rs` (`listen` on Windows; new `endpoint`), `crates/skele-core/src/mcp/mod.rs` (`mcp_launch`), `crates/skele-mcp-bridge/src/main.rs:60-64`
+- Modify: `crates/skele-core/tests/sample_plugin.rs:~130-145`
+- Test: `crates/skele-core/src/mcp/socket.rs` tests
+
+**Interfaces:**
+- Produces: `McpListener::endpoint(&self) -> String` — what the bridge connects to: the socket path on Unix, the pipe name (the socket folder's name) on Windows. `mcp_launch` puts `endpoint()` in `SKELE_MCP_SOCKET`. The Windows `listen` and the bridge both use that string unchanged (`to_ns_name::<GenericNamespaced>()`), so the name is computed in one place.
+- Produces: the sample-plugin test that copies the fixture is `#[cfg(unix)]`.
+
+- [ ] **Step 1: Failing test** — `socket.rs` `launch_points_at_the_endpoint`: `mcp_launch(&grant)`'s `SKELE_MCP_SOCKET` equals `listener.endpoint()`; on Unix that equals `listener.path().display().to_string()`.
+- [ ] **Step 2:** `cargo test -p skele-core launch_points` — expected FAIL (no `endpoint`).
+- [ ] **Step 3:** Implement; gate the test; `cargo check --workspace --tests --target x86_64-pc-windows-msvc` if that target is installed (`rustup target list --installed`), otherwise state in the commit message that Windows was not compiled.
+- [ ] **Step 4:** Run the Global Constraints checks — PASS.
+- [ ] **Step 5: Commit** — `git commit -m "mcp: listener and bridge share one Windows pipe name; unix-only test gated (CR7 CR8)"`
+
+### Task 10: End-to-end check and docs
 
 **Files:**
 - Modify: `docs/adr/0001-ui-state-owned-by-rust.md`, `docs/adr/0007-plugins-are-sidecar-processes.md`, `docs/adr/0012-output-channels-in-the-core.md` (tick the action items that name #3–#7; remove each "Known deviations" entry that is now fixed)
@@ -149,5 +237,7 @@
   - The status bar shows plugins whose containers were never opened as `idle`; opening a container's icon starts its plugin.
   - Open a terminal, close its tab: the shell process is gone (`ps --ppid <app pid>`), and a reload shows no terminal tab.
   - Set `terminal.shell` to `/nonexistent`, run New Terminal from the title bar menu and from `Ctrl+Shift+T`: one toast each, and the Workbench channel in the Output panel shows each failure once.
+  - Open a file in the editor, have the scripted agent call `document_edit` on it: the editor shows the edit at once, and typing afterwards keeps it.
+  - Start and close three agent sessions, then quit: no `skele-mcp-bridge` process remains and the socket folder under `$XDG_RUNTIME_DIR` is gone.
 - [ ] **Step 2:** Update the three ADRs.
 - [ ] **Step 3: Commit** — `git commit -m "docs: review fixes recorded in ADRs"`
