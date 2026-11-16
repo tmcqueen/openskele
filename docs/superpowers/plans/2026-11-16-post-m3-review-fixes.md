@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Fix the five peer-review bugs (#3–#7) so the webview, IPC and native menu change layout and report errors only through the Rust core, fix the CodeRabbit and review findings on PR #1 (M2's tools and MCP server), and fix the review findings on PR #2 (M3's agent pane and document writes).
+**Goal:** Fix the five peer-review bugs (#3–#7) so the webview, IPC and native menu change layout and report errors only through the Rust core, fix the CodeRabbit and review findings on PR #1 (M2's tools and MCP server), fix the review findings on PR #2 (M3's agent pane and document writes), and fix the settings-default finding from the review of PR #8.
 
-**Architecture:** Tasks 1–5 each move a decision the webview or an IPC command makes on its own back into `skele-core`: panel closes wait for the core (#3), views load when the core's layout shows them (#4), initial panels are set by the host once (#5), terminals close only through the layout (#6), and failed commands are reported through `Workbench::notify` (#7). Tasks 6–9 fix the MCP server's connection lifecycle, keep open editors in step with agent edits, reject tool schemas MCP cannot call, and make the bridge and tests portable to Windows. Task 10 accepts integral numbers such as `1.0` wherever a tool schema says `integer`. Task 7 also stops agent writes from replacing unsynced typing; Tasks 11–13 save agent writes to unopened files through the document store, keep the agent session list in the core so a reload restores it, and keep each transcript and its permission answers with their own session.
+**Architecture:** Tasks 1–5 each move a decision the webview or an IPC command makes on its own back into `skele-core`: panel closes wait for the core (#3), views load when the core's layout shows them (#4), initial panels are set by the host once (#5), terminals close only through the layout (#6), and failed commands are reported through `Workbench::notify` (#7). Tasks 6–9 fix the MCP server's connection lifecycle, keep open editors in step with agent edits, reject tool schemas MCP cannot call, and make the bridge and tests portable to Windows. Task 10 accepts integral numbers such as `1.0` wherever a tool schema says `integer`. Task 7 also stops agent writes from replacing unsynced typing; Tasks 11–13 save agent writes to unopened files through the document store, keep the agent session list in the core so a reload restores it, and keep each transcript and its permission answers with their own session. Task 14 rejects settings whose `default` does not satisfy their own schema.
 
 **Tech Stack:** Rust (`skele-core`, `tauri-plugin-skele`), TypeScript webview on Dockview 8.9, `bun test` with happy-dom.
 
-**Spec:** GitHub issues [#3](https://github.com/tmcqueen/openskele/issues/3), [#4](https://github.com/tmcqueen/openskele/issues/4), [#5](https://github.com/tmcqueen/openskele/issues/5), [#6](https://github.com/tmcqueen/openskele/issues/6), [#7](https://github.com/tmcqueen/openskele/issues/7) (each has acceptance criteria), plus `docs/adr/0001-ui-state-owned-by-rust.md`, `0007-plugins-are-sidecar-processes.md` and `0012-output-channels-in-the-core.md`. All five were confirmed still present at `origin/m3-agent-interface` (`4643df9`). CodeRabbit's review of [PR #1](https://github.com/tmcqueen/openskele/pull/1) at `f6cb166`: nine inline comments, all verified as valid; M3 changes none of the flagged files except `workbench.rs` (shutdown now revokes agent grants first, which softens finding 3). A code review of [PR #2](https://github.com/tmcqueen/openskele/pull/2) at `4643df9` (findings numbered R2-1 to R2-4 here, all verified against the code): R2-1 agent writes can replace unsynced typing (Standards P2 and Spec P1, one cause), R2-2 a reload loses the agent session list, R2-3 switching sessions can show the wrong transcript, R2-4 writes to unopened files skip save notifications.
+**Spec:** GitHub issues [#3](https://github.com/tmcqueen/openskele/issues/3), [#4](https://github.com/tmcqueen/openskele/issues/4), [#5](https://github.com/tmcqueen/openskele/issues/5), [#6](https://github.com/tmcqueen/openskele/issues/6), [#7](https://github.com/tmcqueen/openskele/issues/7) (each has acceptance criteria), plus `docs/adr/0001-ui-state-owned-by-rust.md`, `0007-plugins-are-sidecar-processes.md` and `0012-output-channels-in-the-core.md`. All five were confirmed still present at `origin/m3-agent-interface` (`4643df9`). CodeRabbit's review of [PR #1](https://github.com/tmcqueen/openskele/pull/1) at `f6cb166`: nine inline comments, all verified as valid; M3 changes none of the flagged files except `workbench.rs` (shutdown now revokes agent grants first, which softens finding 3). A code review of [PR #2](https://github.com/tmcqueen/openskele/pull/2) at `4643df9` (findings numbered R2-1 to R2-4 here, all verified against the code): R2-1 agent writes can replace unsynced typing (Standards P2 and Spec P1, one cause), R2-2 a reload loses the agent session list, R2-3 switching sessions can show the wrong transcript, R2-4 writes to unopened files skip save notifications. CodeRabbit's review of [PR #8](https://github.com/tmcqueen/openskele/pull/8) (these docs): settings defaults are never validated (Task 14), Task 5's webview toast bypassed `Workbench::notify`, and the bindings check could not pass before its commit (both fixed in this plan's text).
 
 **Base:** `main` after `m3-agent-interface` (which contains `m2-tools-mcp`) is merged. Line numbers below are at `4643df9`.
 
@@ -19,14 +19,15 @@
 - ADR-0012: every user-facing notification goes through `Workbench::notify`, which emits one `HostEvent::Message` and appends one line `[<level>] <message>\r\n` (or `[<level>] <source>: <message>\r\n`) to the `Workbench` channel.
 - Agent tools keep calling `Workbench::execute_command` directly: a failed `command_execute` tool call returns its error to the agent and does not notify the user.
 - No Dockview tab context menu: do not set `getTabContextMenuItems` (absent means no menu in 8.9).
-- Each task ends green on: `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `bun run typecheck`, `bun run --cwd apps/workbench test`, and `bun run gen:bindings && git diff --exit-code apps/workbench/src/bindings.ts` after the task's own binding change is committed.
-- Each task's commit message ends with `(closes #N)`; Tasks 6–13 instead name the review findings they fix (`CR1`–`CR9`, `P3`, `R2-1`–`R2-4`, as in each task).
+- Each task ends green on: `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings`, `bun run typecheck`, `bun run --cwd apps/workbench test`, and the bindings check `git add apps/workbench/src/bindings.ts && bun run gen:bindings && git diff --exit-code apps/workbench/src/bindings.ts`. Staging first makes the check compare a fresh regeneration with the task's own (staged) bindings, so it runs before the commit step rather than after it.
+- UI-originated failures that reach the core are reported by the core through `Workbench::notify` (one toast, one `Workbench` channel line); the webview adds no toast of its own. Failures of the IPC call itself, which never reach the core, go to `console.error` only.
+- Each task's commit message ends with `(closes #N)`; Tasks 6–14 instead name the review findings they fix (`CR1`–`CR9`, `P3`, `R2-1`–`R2-4`, PR #8, as in each task).
 - MCP requires a tool's `inputSchema` to be a JSON Schema whose `type` is `"object"`.
 - The bridge (`crates/skele-mcp-bridge`) keeps no dependency on `skele-core` outside `[dev-dependencies]`.
 
 ## Review Focus
 
-- A close request for a panel the core no longer has (closed meanwhile by an agent tool): the IPC call fails, a toast says so, and the next `layoutChanged` removes the tab; the webview must not keep a tab the core does not list (test in Task 5).
+- A close request for a panel the core no longer has (closed meanwhile by an agent tool): the core reports the failure through `Workbench::notify` (one toast and one `Workbench` channel line, none from the webview), and the next `layoutChanged` removes the tab; the webview must not keep a tab the core does not list (test in Task 5).
 - A `viewRefresh` arriving for a view whose container has never been shown: nothing is fetched and the plugin is not asked for anything; the view loads fresh when first shown (test in Task 4).
 - `initial_panels` listing the same panel twice, or not listing Output: one panel each, the last one active; Output is simply not open (test in Task 3).
 - A command that fails because the IPC call itself is rejected (permission or serialization error, never reaching the core): no toast, but `console.error` records it; nothing is lost silently (test in Task 2).
@@ -124,20 +125,25 @@
 ### Task 5: Closing a tab asks the host first (#3)
 
 **Files:**
+- Modify: `crates/skele-core/src/layout.rs` (new `close_panel_reported` beside `close_panel`), `crates/tauri-plugin-skele/src/commands.rs` (`layout_close_panel` calls it)
 - Modify: `apps/workbench/src/layout.ts` (`options()` sets `tabComponent: "main"` on every main-area panel; `createMainArea` drops the `onDidRemovePanel` handler at lines 104-107 and gains `createTab`)
 - Modify: `apps/workbench/src/main.ts:174` (`createTabComponent`: `"icon"` → `bars.createIconTab()`, `"main"` → `main.createTab()`)
 - Modify: `apps/workbench/src/styles.css` (tab title and close button; keep the existing outlined-tab look)
-- Test: `apps/workbench/src/layout.test.ts`
+- Test: `crates/skele-core/tests/layout.rs`, `apps/workbench/src/layout.test.ts`
 
 **Interfaces:**
-- Produces: `MainArea.createTab(): ITabRenderer`. The element holds a `.main-tab-title` span and a `button.main-tab-close` (`codicon codicon-close`, `aria-label="Close"`). `init({ api, title })` keeps `api.id`. Clicking the button, or a middle click (`auxclick`, `button === 1`) on the tab, calls `commands.layoutClosePanel(id)` with the event's propagation stopped; a rejection is shown with `toast("error", …)`. It never calls `api.close()`. Panels leave Dockview only through `reconcile`.
+- Consumes: the reporting pattern of Task 2 (`execute_command_reported`).
+- Produces: `Workbench::close_panel_reported(&self, id: &str) -> Result<()>` — calls `close_panel`; on `Err(e)` calls `self.notify(MessageLevel::Error, &e.to_string(), None)` once, then returns `Err(e)`. The `layout_close_panel` IPC command calls it.
+- Produces: `MainArea.createTab(): ITabRenderer`. The element holds a `.main-tab-title` span and a `button.main-tab-close` (`codicon codicon-close`, `aria-label="Close"`). `init({ api, title })` keeps `api.id`. Clicking the button, or a middle click (`auxclick`, `button === 1`) on the tab, calls `commands.layoutClosePanel(id)` with the event's propagation stopped. A rejection is logged with `console.error("close failed", id, error)` and no toast: the core has already reported it if it got that far (Global Constraints). It never calls `api.close()`. Panels leave Dockview only through `reconcile`.
 
-- [ ] **Step 1: Failing tests** in `layout.test.ts` (extend the `./host` mock so `layoutClosePanel` can be made to reject; render tabs through `createTabComponent: ({ name }) => name === "main" ? main.createTab() : undefined` in `setup()`):
-  - Replace `"closing a tab asks the host to close it and nothing else"` with `"the close button asks the host and keeps the tab until the host's layout drops it"`: click `.main-tab-close` on `editor:/e1` → `calls` equals `["close editor:/e1"]` and `dock.getPanel("editor:/e1")` still exists; `reconcile` without `/e1` → the panel is gone and `calls` is unchanged.
-  - `"a rejected close leaves the tab and says why"`: `layoutClosePanel` rejects → the panel still exists and the toast spy received `"error"`.
-  - `"middle click closes through the host"`: dispatch `auxclick` with `button: 1` on the tab element → one `close` call.
-- [ ] **Step 2:** `bun run --cwd apps/workbench test layout` — expected FAIL.
-- [ ] **Step 3:** Implement `createTab`, wire it, remove the `onDidRemovePanel` handler, add styles.
+- [ ] **Step 1: Failing tests**
+  - `tests/layout.rs` `failed_close_is_reported_once`: subscribe, `close_panel_reported("nope")` is `Err(UnknownPanel)`; exactly one `HostEvent::Message { level: Error, .. }`; `output_read(WORKBENCH_CHANNEL)` equals `"[error] no such panel is open: nope\r\n"`. A successful `close_panel_reported("output")` emits no `Message`.
+  - In `layout.test.ts` (extend the `./host` mock so `layoutClosePanel` can be made to reject; render tabs through `createTabComponent: ({ name }) => name === "main" ? main.createTab() : undefined` in `setup()`):
+    - Replace `"closing a tab asks the host to close it and nothing else"` with `"the close button asks the host and keeps the tab until the host's layout drops it"`: click `.main-tab-close` on `editor:/e1` → `calls` equals `["close editor:/e1"]` and `dock.getPanel("editor:/e1")` still exists; `reconcile` without `/e1` → the panel is gone and `calls` is unchanged.
+    - `"a rejected close leaves the tab and adds no toast"`: `layoutClosePanel` rejects → the panel still exists, the toast spy was not called, and a `console.error` spy was called once.
+    - `"middle click closes through the host"`: dispatch `auxclick` with `button: 1` on the tab element → one `close` call.
+- [ ] **Step 2:** `cargo test -p skele-core --test layout failed_close && bun run --cwd apps/workbench test layout` — expected FAIL.
+- [ ] **Step 3:** Implement `close_panel_reported` and point the IPC command at it; implement `createTab`, wire it, remove the `onDidRemovePanel` handler, add styles.
 - [ ] **Step 4:** Run the Global Constraints checks — PASS.
 - [ ] **Step 5: Commit** — `git commit -m "workbench: tab closes wait for the host's layout (closes #3)"`
 
@@ -180,14 +186,14 @@ Findings:
 **Interfaces:**
 - Produces: `DocumentStore::set_text(&self, uri: &str, text: &str, base: Option<u32>) -> Result<u32>` — with `Some(base)`, `Err(Error::StaleDocument { uri: String, current: u32 })` when `base` is not the current version, and nothing changes. `None` replaces unconditionally; only `write_for_agent` passes `None`, after its own unsaved-edits check.
 - Produces: `Workbench::edit_document(&self, uri: &str, start: usize, end: usize, text: &str) -> Result<u32>` — `documents().edit(..)`, then emits `HostEvent::DocumentChanged { uri, version }`. The `document_edit` tool calls it.
-- Produces: IPC `document_set_text(uri, text, base: u32) -> Result<u32>`. The editor tracks the version it last synced (from `documentOpen`, each successful `documentSetText`, and each reload). A `StaleDocument` rejection reloads the editor from the host and shows `toast("warning", "<file> changed elsewhere; your last edit was not applied")`.
+- Produces: IPC `document_set_text(uri, text, base: u32) -> Result<u32>`. On `StaleDocument` the IPC command calls `notify(MessageLevel::Warning, "<file name> changed elsewhere; your last edit was not applied", None)` before returning the error (Global Constraints: the core reports, the webview adds no toast). The editor tracks the version it last synced (from `documentOpen`, each successful `documentSetText`, and each reload); on a `StaleDocument` rejection it reloads from the host.
 - Produces (R2-1): the editor makes the core see local edits at once. The first content change after a sync is pushed immediately (leading edge); later changes keep the 150 ms trailing debounce. That first push marks the document dirty in the core, so an agent write that arrives afterwards is refused by `write_for_agent`'s existing check.
-- Produces (R2-1): a reload never replaces local edits. It does nothing while a push is pending or in flight, and it records `model.getAlternativeVersionId()` before awaiting `documentOpen` and applies the text only if that id is unchanged afterwards. When it skips, the editor's pending push carries an old `base`, is refused as `StaleDocument`, and the warning above is shown. The only edits that can still be lost are those typed within one IPC round trip of an agent write that reached the core first, and the warning names the file when that happens.
+- Produces (R2-1): a reload never replaces local edits. It does nothing while a push is pending or in flight, and it records `model.getAlternativeVersionId()` before awaiting `documentOpen` and applies the text only if that id is unchanged afterwards. When it skips, the editor's pending push carries an old `base`, is refused as `StaleDocument`, and the core's warning above is shown. The only edits that can still be lost are those typed within one IPC round trip of an agent write that reached the core first, and the warning names the file when that happens.
 
 - [ ] **Step 1: Failing tests**
   - `document.rs` `stale_set_text_is_refused`: open (v1), `edit` (v2), `set_text(uri, "x", Some(1))` → `StaleDocument { current: 2, .. }`, text unchanged; `set_text(uri, "x", Some(2))` → `Ok(3)`; `set_text(uri, "y", None)` → `Ok(4)`.
   - `builtin.rs` `document_edit_tells_editors`: subscribe, call `document_edit` → one `HostEvent::DocumentChanged` with the returned version.
-  - `editor.test.ts` `"a stale push reloads instead of overwriting"`: stub `documentSetText` to reject with a `StaleDocument` message once; type into the model, advance the debounce; expect `documentOpen` called again (reload) and the warning toast.
+  - `editor.test.ts` `"a stale push reloads instead of overwriting"`: stub `documentSetText` to reject with a `StaleDocument` message once; type into the model, advance the debounce; expect `documentOpen` called again (reload) and no toast from the webview.
   - `editor.test.ts` `"the first edit after a sync is pushed at once"`: type one character; `documentSetText` is called before any timer advances; a second character is pushed only after 150 ms.
   - `editor.test.ts` `"a reload during unsynced typing keeps the typing"`: hold `documentSetText` unresolved, type, call `reloadDocument(uri)`; the model still holds the typed text and `documentOpen` was not called.
   - `editor.test.ts` `"typing while a reload is awaited keeps the typing"`: hold `documentOpen` unresolved, call `reloadDocument(uri)`, type, then resolve `documentOpen` with other text; the model keeps the typed text.
@@ -321,10 +327,33 @@ Finding: R2-3 (PR #2 review, Spec P2). `apps/workbench/src/agent.ts:71-74` (`sho
 - [ ] **Step 4:** Run the Global Constraints checks — PASS.
 - [ ] **Step 5: Commit** — `git commit -m "agents: transcripts and permission answers stay with their session (R2-3)"`
 
-### Task 14: End-to-end check and docs
+### Task 14: A setting's default must satisfy its own schema (PR #8 review)
+
+Finding: CodeRabbit on PR #8 (`docs/adr/0010-settings-are-schema-driven.md:18`). ADR-0010 says plugins never see invalid values, but `ConfigStore::register_section` (`crates/skele-core/src/config.rs:129-147`) compiles each schema without checking its `default`, and `effective()` (`config.rs:160-171`) returns that default unchecked when no stored value applies. A manifest such as `{"type": "integer", "default": "three"}` therefore hands `"three"` to the plugin and the settings form.
 
 **Files:**
-- Modify: `docs/adr/0001-ui-state-owned-by-rust.md`, `docs/adr/0007-plugins-are-sidecar-processes.md`, `docs/adr/0012-output-channels-in-the-core.md` (tick the action items that name #3–#7; remove each "Known deviations" entry that is now fixed)
+- Modify: `crates/skele-core/src/config.rs` (`register_section`)
+- Modify: `docs/adr/0010-settings-are-schema-driven.md` (add the rule to the Decision; tick the new action item)
+- Test: `crates/skele-core/src/config.rs` tests, `crates/skele-core/tests/tools.rs` or a new manifest test beside the other install-rollback tests
+
+**Interfaces:**
+- Produces: after compiling a property's schema, `register_section` validates its `default` (when present) with that validator and returns `Err(Error::InvalidSchema { key, message: "default does not match the schema: <validation errors>" })` otherwise, registering nothing from that section (the existing all-or-nothing behavior). A property without `default` is unchanged (its effective value stays `null` when nothing is stored).
+- `effective()` is unchanged: with every registered default valid, it can no longer return an invalid one.
+
+- [ ] **Step 1: Failing tests**
+  - `config.rs` `invalid_default_is_rejected`: `{"type": "integer", "default": "three"}` → `InvalidSchema` whose message contains `default`; `sections()` is unchanged.
+  - `config.rs` `default_outside_bounds_is_rejected`: `{"type": "integer", "minimum": 1, "maximum": 5, "default": 9}` → `InvalidSchema`.
+  - `config.rs` `valid_or_missing_default_is_accepted`: `{"type": "integer", "default": 3}` and `{"type": "integer"}` → `Ok`; `get` returns `3` and `null`.
+  - Plugin install with a manifest whose `configuration` has an invalid default → install `Err`, none of the plugin's commands or settings remain.
+- [ ] **Step 2:** `cargo test -p skele-core default` — expected FAIL.
+- [ ] **Step 3:** Implement; add to ADR-0010's Decision: "A property's `default` is validated against its schema at registration; a section with an invalid default is rejected."
+- [ ] **Step 4:** Run the Global Constraints checks — PASS.
+- [ ] **Step 5: Commit** — `git commit -m "config: a setting's default must match its schema (PR #8 review)"`
+
+### Task 15: End-to-end check and docs
+
+**Files:**
+- Modify: `docs/adr/0001-ui-state-owned-by-rust.md`, `docs/adr/0007-plugins-are-sidecar-processes.md`, `docs/adr/0010-settings-are-schema-driven.md`, `docs/adr/0012-output-channels-in-the-core.md` (tick the action items that name #3–#7 and the settings default; remove each "Known deviations" entry that is now fixed)
 
 - [ ] **Step 1:** `bun run build:plugins`, then run the app on a private display with throwaway settings (`Xvfb :99`, `DISPLAY=:99 GDK_BACKEND=x11`, `XDG_CONFIG_HOME`/`XDG_DATA_HOME` in the scratchpad, `bun run dev`) and drive it with `xdotool`:
   - Fresh start shows Output and Settings with Settings active. Close Settings, reload the webview (touch `apps/workbench/src/main.ts`): only Output remains.
@@ -336,5 +365,5 @@ Finding: R2-3 (PR #2 review, Spec P2). `apps/workbench/src/agent.ts:71-74` (`sho
   - Start two agent sessions, reload the webview: the picker lists both with their labels and the previously selected one is shown; a pending permission request in it can still be answered.
   - Type into an open file and, within the debounce, have the scripted agent write that file: the agent's write is refused and the typed text stays.
   - Have the scripted agent write a file that is not open: the sample plugin's output channel shows its `saved file://…` line.
-- [ ] **Step 2:** Update the three ADRs.
+- [ ] **Step 2:** Update the four ADRs.
 - [ ] **Step 3: Commit** — `git commit -m "docs: review fixes recorded in ADRs"`

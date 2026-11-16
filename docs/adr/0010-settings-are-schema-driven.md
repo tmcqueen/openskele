@@ -60,6 +60,15 @@ which is what an extensible workbench needs most.
 - Harder: rich editors for objects and arrays (today a JSON text area).
 - Revisit: settings search, and per-language or per-folder scopes.
 
+## Known deviations
+
+- Defaults are not validated: `register_section` compiles each schema but
+  never checks its `default` against it, and `effective()` returns that
+  default unchecked when nothing is stored. An invalid default therefore
+  reaches plugins and the settings form. Found in the review of PR #8; fixed
+  by Task 14 of `docs/superpowers/plans/2026-11-16-post-m3-review-fixes.md`.
+
 ## Action Items
 1. [x] `ConfigStore` with scopes, validation and atomic writes.
 2. [x] Generated settings pane with user and workspace tabs.
+3. [ ] Validate each `default` against its schema at registration.
