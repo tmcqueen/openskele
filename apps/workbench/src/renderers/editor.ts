@@ -19,6 +19,14 @@ function languageFor(path: string): string {
   return language?.id ?? "plaintext";
 }
 
+/** Open editors by document uri, so a change made elsewhere can reach them. */
+const reloaders = new Map<string, () => Promise<void>>();
+
+/** Shows a document's new text in its open editor, if any (an agent wrote it). */
+export function reloadDocument(uri: string): void {
+  void reloaders.get(uri)?.();
+}
+
 export function retheme(theme: string): void {
   monaco.editor.setTheme(theme === "light" ? "vs" : "vs-dark");
 }
@@ -26,6 +34,7 @@ export function retheme(theme: string): void {
 export function createEditor(path: string, theme: string): { element: HTMLElement; dispose(): void } {
   const element = h("div", { class: "editor" });
   let editor: monaco.editor.IStandaloneCodeEditor | undefined;
+  let uri: string | undefined;
   let disposed = false;
 
   commands.documentOpen(path).then(
@@ -39,6 +48,16 @@ export function createEditor(path: string, theme: string): { element: HTMLElemen
         minimap: { enabled: false },
       });
       const model = editor.getModel()!;
+      // Set while showing text from the host, so it is not pushed straight back.
+      let reloading = false;
+      uri = document.uri;
+      reloaders.set(uri, async () => {
+        const current = await commands.documentOpen(path);
+        if (current.text === model.getValue()) return;
+        reloading = true;
+        model.pushEditOperations([], [{ range: model.getFullModelRange(), text: current.text }], () => null);
+        reloading = false;
+      });
 
       // Coalesce keystrokes, but never let a save run ahead of pending text.
       let timer: number | undefined;
@@ -55,6 +74,7 @@ export function createEditor(path: string, theme: string): { element: HTMLElemen
         return synced;
       };
       model.onDidChangeContent(() => {
+        if (reloading) return;
         clearTimeout(timer);
         timer = window.setTimeout(push, SYNC_DELAY_MS);
       });
@@ -71,6 +91,7 @@ export function createEditor(path: string, theme: string): { element: HTMLElemen
     element,
     dispose: () => {
       disposed = true;
+      if (uri) reloaders.delete(uri);
       editor?.getModel()?.dispose();
       editor?.dispose();
     },

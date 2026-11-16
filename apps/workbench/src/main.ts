@@ -213,6 +213,9 @@ async function start(): Promise<void> {
         void settings?.reload();
         if (event.keys.some((key) => APPEARANCE.includes(key))) void loadAppearance();
         break;
+      case "documentChanged":
+        loadedEditor()?.reloadDocument(event.uri);
+        break;
       case "agentUpdate":
       case "agentSessionEnded":
         agentPane.onEvent(event);

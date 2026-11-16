@@ -11,10 +11,10 @@ use std::time::Duration;
 
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::v1::schema::{
-    CancelNotification, ContentBlock, EnvVariable, InitializeRequest, McpServer, McpServerStdio, NewSessionRequest,
-    PromptRequest, ReadTextFileRequest, ReadTextFileResponse, RequestPermissionOutcome, RequestPermissionRequest,
-    RequestPermissionResponse, SelectedPermissionOutcome, SessionId, SessionNotification, TextContent,
-    WriteTextFileRequest, WriteTextFileResponse,
+    CancelNotification, ClientCapabilities, ContentBlock, EnvVariable, FileSystemCapabilities, InitializeRequest,
+    McpServer, McpServerStdio, NewSessionRequest, PromptRequest, ReadTextFileRequest, ReadTextFileResponse,
+    RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse, SelectedPermissionOutcome,
+    SessionId, SessionNotification, TextContent, WriteTextFileRequest, WriteTextFileResponse,
 };
 use agent_client_protocol::v1::ConnectionTo;
 use agent_client_protocol::{Agent, ByteStreams, Client};
@@ -64,6 +64,8 @@ pub(crate) struct AgentSession {
     kill: Mutex<Option<oneshot::Sender<()>>>,
     /// Ends the ACP connection task.
     shutdown: Mutex<Option<oneshot::Sender<()>>>,
+    /// The agent is gone; the transcript stays readable until the session is closed.
+    ended: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Default)]
@@ -284,7 +286,11 @@ impl Workbench {
 
         let setup = async {
             let conn = conn_rx.await.map_err(|_| agent_error(&name, "the agent closed before connecting"))?;
-            conn.send_request(InitializeRequest::new(ProtocolVersion::V1))
+            // Offer file access, so agents read unsaved buffers and write through the editor.
+            let files = FileSystemCapabilities::new().read_text_file(true).write_text_file(true);
+            let initialize =
+                InitializeRequest::new(ProtocolVersion::V1).client_capabilities(ClientCapabilities::new().fs(files));
+            conn.send_request(initialize)
                 .block_task()
                 .await
                 .map_err(|e| agent_error(&name, format!("initialize failed: {e}")))?;
@@ -322,6 +328,7 @@ impl Workbench {
             grant_id: grant.id,
             kill: Mutex::new(Some(kill_tx)),
             shutdown: Mutex::new(Some(shutdown_tx)),
+            ended: Default::default(),
         }))
     }
 
@@ -329,13 +336,14 @@ impl Workbench {
         SessionHandle { inner: Arc::downgrade(&self.inner), id: id.to_owned() }
     }
 
-    /// What the agent reads: the open buffer if the file is open (unsaved
-    /// edits included), else the file on disk. `line` is 1-based.
+    /// What the agent reads: the editor's buffer when it has unsaved edits
+    /// (what the user sees), else the file on disk. `line` is 1-based.
     fn read_for_agent(&self, path: &Path, line: Option<u32>, limit: Option<u32>) -> Result<String> {
         let canonical = std::fs::canonicalize(path)?;
-        let text = match self.documents().text(&crate::document::uri_for(&canonical)) {
-            Ok(text) => text,
-            Err(_) => std::fs::read_to_string(&canonical)?,
+        let uri = crate::document::uri_for(&canonical);
+        let text = match self.documents().dirty(&uri) {
+            Some(true) => self.documents().text(&uri)?,
+            _ => std::fs::read_to_string(&canonical)?,
         };
         if line.is_none() && limit.is_none() {
             return Ok(text);
@@ -345,29 +353,36 @@ impl Workbench {
         Ok(text.split_inclusive('\n').skip(skip).take(take).collect())
     }
 
-    /// What the agent writes goes through the document store, so open editors
-    /// show it and saving is announced like any other save.
+    /// What the agent writes. A file open in an editor is written through the
+    /// document store and the editor is told to reload; one with unsaved edits
+    /// is refused rather than overwritten.
     fn write_for_agent(&self, path: &Path, content: &str) -> Result<()> {
-        if !path.exists() {
-            std::fs::write(path, content)?;
-            return Ok(());
+        let uri = std::fs::canonicalize(path).ok().map(|p| crate::document::uri_for(&p));
+        match uri.as_deref().map(|uri| (uri, self.documents().dirty(uri))) {
+            Some((_, Some(true))) => Err(Error::Other(format!(
+                "{} has unsaved changes in the editor; save or discard them first",
+                path.display()
+            ))),
+            Some((uri, Some(false))) => {
+                let version = self.documents().set_text(uri, content)?;
+                self.inner.bus.emit(HostEvent::DocumentChanged { uri: uri.to_owned(), version });
+                self.save_document(uri)?;
+                Ok(())
+            }
+            _ => Ok(std::fs::write(path, content)?),
         }
-        let doc = self.documents().open(path)?;
-        self.documents().set_text(&doc.uri, content)?;
-        self.save_document(&doc.uri)?;
-        Ok(())
     }
 
     /// Sends a prompt and waits for the turn to end.
     pub async fn agent_prompt(&self, id: &str, text: String) -> Result<StopReason> {
-        let session = self.session(id)?;
+        let session = self.live_session(id)?;
         self.update_transcript(id, &session, |t| Some(t.push(Entry::UserMessage { text: text.clone() })));
         let request = PromptRequest::new(session.acp_session.clone(), vec![ContentBlock::Text(TextContent::new(text))]);
         match session.conn.send_request(request).block_task().await {
             Ok(response) => Ok(stop_reason(response.stop_reason)),
             Err(e) => {
                 let message = format!("{}: {e}", session.agent_name);
-                self.update_transcript(id, &session, |t| Some(t.push(Entry::Error { message })));
+                self.push_error(id, &session, message);
                 Ok(StopReason::Error)
             }
         }
@@ -375,7 +390,7 @@ impl Workbench {
 
     /// Asks the agent to stop the current turn; pending permission requests are cancelled.
     pub async fn agent_cancel(&self, id: &str) -> Result<()> {
-        let session = self.session(id)?;
+        let session = self.live_session(id)?;
         self.cancel_permissions(id, &session);
         session
             .conn
@@ -421,9 +436,28 @@ impl Workbench {
         Ok(self.session(id)?.transcript.lock().unwrap().clone())
     }
 
-    /// Ends a session: stops the agent and revokes its grant.
+    /// A session whose agent is still running.
+    fn live_session(&self, id: &str) -> Result<Arc<AgentSession>> {
+        let session = self.session(id)?;
+        if session.ended.load(Ordering::SeqCst) {
+            return Err(agent_error(&session.agent_name, "the session has ended"));
+        }
+        Ok(session)
+    }
+
+    /// Records an error, once: a turn failing and the agent exiting are usually the same event.
+    fn push_error(&self, id: &str, session: &AgentSession, message: String) {
+        self.update_transcript(id, session, |t| match t.entries.last() {
+            Some(Entry::Error { .. }) => None,
+            _ => Some(t.push(Entry::Error { message })),
+        });
+    }
+
+    /// Ends a session and forgets it: stops the agent if it still runs,
+    /// revokes its grant, and drops its transcript.
     pub async fn close_agent_session(&self, id: &str) {
         self.agent_session_ended(id, "closed", false);
+        self.inner.agent_sessions.sessions.lock().unwrap().remove(id);
     }
 
     /// Ends every session, for shutdown.
@@ -432,17 +466,21 @@ impl Workbench {
         for id in ids {
             self.agent_session_ended(&id, "closed", false);
         }
+        self.inner.agent_sessions.sessions.lock().unwrap().clear();
     }
 
     /// Tears a session down once, whoever notices first: the user closing it
     /// or the agent process exiting (`unexpected`, recorded in the transcript).
+    /// The session stays listed, with its transcript, until it is closed.
     fn agent_session_ended(&self, id: &str, reason: &str, unexpected: bool) {
-        let Some(session) = self.inner.agent_sessions.sessions.lock().unwrap().remove(id) else { return };
+        let Some(session) = self.inner.agent_sessions.get(id) else { return };
+        if session.ended.swap(true, Ordering::SeqCst) {
+            return;
+        }
         self.inner.grants.revoke(session.grant_id);
         self.cancel_permissions(id, &session);
         if unexpected {
-            let message = format!("{}: {reason}", session.agent_name);
-            self.update_transcript(id, &session, |t| Some(t.push(Entry::Error { message })));
+            self.push_error(id, &session, format!("{}: {reason}", session.agent_name));
         }
         if let Some(kill) = session.kill.lock().unwrap().take() {
             let _ = kill.send(());

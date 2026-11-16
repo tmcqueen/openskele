@@ -82,6 +82,11 @@ impl DocumentStore {
     }
 
     /// Writes the buffer to its file and returns the version that was saved.
+    /// Whether an open document has unsaved edits; `None` if it is not open.
+    pub fn dirty(&self, uri: &str) -> Option<bool> {
+        self.documents.lock().unwrap().get(uri).map(|doc| doc.dirty)
+    }
+
     /// The current text of an open document, unsaved edits included.
     pub fn text(&self, uri: &str) -> Result<String> {
         self.with(uri, |doc| Ok(doc.rope.to_string()))

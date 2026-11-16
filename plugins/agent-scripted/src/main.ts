@@ -19,6 +19,9 @@ import { agent, methods, ndJsonStream, PROTOCOL_VERSION, type AgentContext, type
 
 /** What session/new gave us: where the workbench's tools are. */
 const sessions = new Map<string, { mcpServers: McpServer[]; cancelled: boolean }>();
+/** Whether the client said it serves fs/read_text_file and fs/write_text_file. */
+let canRead = false;
+let canWrite = false;
 let nextSession = 1;
 
 /** Calls one MCP tool over a stdio server, with a hand-rolled minimal client. */
@@ -63,11 +66,16 @@ async function say(client: AgentContext, sessionId: string, text: string): Promi
 }
 
 const app = agent({ name: "agent-scripted" })
-  .onRequest(methods.agent.initialize, () => ({
-    protocolVersion: PROTOCOL_VERSION,
-    agentCapabilities: {},
-    authMethods: [],
-  }))
+  .onRequest(methods.agent.initialize, ({ params }) => {
+    // Like a real agent: use the client's file methods only if it offers them.
+    canRead = params.clientCapabilities?.fs?.readTextFile === true;
+    canWrite = params.clientCapabilities?.fs?.writeTextFile === true;
+    return {
+      protocolVersion: PROTOCOL_VERSION,
+      agentCapabilities: {},
+      authMethods: [],
+    };
+  })
   .onRequest(methods.agent.session.new, ({ params }) => {
     const sessionId = `scripted-${nextSession++}`;
     sessions.set(sessionId, { mcpServers: params.mcpServers, cancelled: false });
@@ -135,11 +143,13 @@ const app = agent({ name: "agent-scripted" })
         break;
       }
       case "read": {
+        if (!canRead) throw new Error("the client does not offer fs/read_text_file");
         const { content } = await client.request(methods.client.fs.readTextFile, { sessionId, path: arg });
         await say(client, sessionId, content.split("\n")[0]);
         break;
       }
       case "write":
+        if (!canWrite) throw new Error("the client does not offer fs/write_text_file");
         await client.request(methods.client.fs.writeTextFile, { sessionId, path: arg, content: "written\n" });
         await say(client, sessionId, "Wrote.");
         break;

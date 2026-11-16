@@ -244,7 +244,12 @@ export type HostEvent_Deserialize =
 /**  One transcript entry of an agent session changed or was added; same index means replace. */
 { type: "agentUpdate"; session: string; index: number; entry: Entry_Deserialize } | 
 /**  An agent session ended: closed, or the agent exited. */
-{ type: "agentSessionEnded"; session: string; reason: string } | { type: "pluginState"; pluginId: string; state: PluginState } | { type: "documentSaved"; uri: string; version: number };
+{ type: "agentSessionEnded"; session: string; reason: string } | { type: "pluginState"; pluginId: string; state: PluginState } | 
+/**
+ *  A document's text was replaced by someone other than its editor (an
+ *  agent); open editors should reload it.
+ */
+{ type: "documentChanged"; uri: string; version: number } | { type: "documentSaved"; uri: string; version: number };
 
 export type HostEvent_Serialize = 
 /**  Commands, menus, keybindings, views or config schemas changed; re-fetch the snapshot. */
@@ -262,7 +267,12 @@ export type HostEvent_Serialize =
 /**  One transcript entry of an agent session changed or was added; same index means replace. */
 { type: "agentUpdate"; session: string; index: number; entry: Entry_Serialize } | 
 /**  An agent session ended: closed, or the agent exited. */
-{ type: "agentSessionEnded"; session: string; reason: string } | { type: "pluginState"; pluginId: string; state: PluginState } | { type: "documentSaved"; uri: string; version: number };
+{ type: "agentSessionEnded"; session: string; reason: string } | { type: "pluginState"; pluginId: string; state: PluginState } | 
+/**
+ *  A document's text was replaced by someone other than its editor (an
+ *  agent); open editors should reload it.
+ */
+{ type: "documentChanged"; uri: string; version: number } | { type: "documentSaved"; uri: string; version: number };
 
 export type Keybinding = Keybinding_Serialize | Keybinding_Deserialize;
 

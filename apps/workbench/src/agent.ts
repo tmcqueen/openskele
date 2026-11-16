@@ -9,6 +9,10 @@ import { toast } from "./toast";
 interface Session {
   id: string;
   label: string;
+  /** A turn is in progress. */
+  running: boolean;
+  /** The agent is gone; the transcript can still be read. */
+  ended: boolean;
 }
 
 export interface AgentPane {
@@ -46,18 +50,21 @@ export function createAgentPane(): AgentPane {
 
   const sessions: Session[] = [];
   let agents: AgentInfo[] = [];
-  let running = false;
+  let labels = 0;
+  const find = (id: string | null) => sessions.find((s) => s.id === id);
 
   function render(): void {
-    sessionPicker.replaceChildren(...sessions.map((s) => h("option", { value: s.id }, s.label)));
+    sessionPicker.replaceChildren(
+      ...sessions.map((s) => h("option", { value: s.id }, s.ended ? `${s.label} (ended)` : s.label)),
+    );
     if (current) sessionPicker.value = current;
-    const has = current !== null;
-    empty.hidden = has;
-    chat.element.hidden = !has;
-    sessionPicker.disabled = closeSession.disabled = !has;
-    input.disabled = !has;
-    send.hidden = running;
-    stop.hidden = !running;
+    const session = find(current);
+    empty.hidden = session !== undefined;
+    chat.element.hidden = session === undefined;
+    sessionPicker.disabled = closeSession.disabled = session === undefined;
+    input.disabled = send.disabled = !session || session.ended;
+    send.hidden = session?.running === true;
+    stop.hidden = session?.running !== true;
     newSession.disabled = agents.length === 0;
   }
 
@@ -73,7 +80,7 @@ export function createAgentPane(): AgentPane {
     newSession.disabled = true;
     try {
       const id = await commands.agentNewSession(agent.id);
-      sessions.push({ id, label: `${agent.name} ${sessions.filter((s) => s.label.startsWith(agent.name)).length + 1}` });
+      sessions.push({ id, label: `${agent.name} ${++labels}`, running: false, ended: false });
       await show(id);
       input.focus();
     } catch (error) {
@@ -84,24 +91,33 @@ export function createAgentPane(): AgentPane {
   }
 
   async function prompt(): Promise<void> {
+    const session = find(current);
     const text = input.value.trim();
-    if (!current || !text || running) return;
+    if (!session || !text || session.running || session.ended) return;
     input.value = "";
-    running = true;
+    session.running = true;
     render();
     try {
-      await commands.agentPrompt(current, text);
+      await commands.agentPrompt(session.id, text);
     } catch (error) {
       toast("error", String(error));
     } finally {
-      running = false;
+      session.running = false;
       render();
     }
   }
 
+  function forget(id: string): void {
+    const index = sessions.findIndex((s) => s.id === id);
+    if (index >= 0) sessions.splice(index, 1);
+    if (id === current) void show(sessions.at(-1)?.id ?? null);
+    else render();
+  }
+
   newSession.addEventListener("click", () => void start());
   closeSession.addEventListener("click", () => {
-    if (current) void commands.agentCloseSession(current);
+    const id = current;
+    if (id) commands.agentCloseSession(id).then(() => forget(id), (e) => toast("error", String(e)));
   });
   sessionPicker.addEventListener("change", () => void show(sessionPicker.value));
   send.addEventListener("click", () => void prompt());
@@ -126,12 +142,14 @@ export function createAgentPane(): AgentPane {
     onEvent(event) {
       if (event.type === "agentUpdate" && event.session === current) chat.update(event.index, event.entry);
       if (event.type === "agentSessionEnded") {
-        const index = sessions.findIndex((s) => s.id === event.session);
-        if (index >= 0) sessions.splice(index, 1);
-        if (event.session === current) {
-          if (event.reason !== "closed") toast("warning", `The agent session ended: ${event.reason}`);
-          void show(sessions.at(-1)?.id ?? null);
-        } else render();
+        const session = find(event.session);
+        if (!session) return;
+        if (event.reason === "closed") return forget(session.id);
+        // The agent went away: keep the conversation, and what went wrong, on screen.
+        session.ended = true;
+        session.running = false;
+        toast("warning", `${session.label} ended: ${event.reason}`);
+        render();
       }
     },
   };

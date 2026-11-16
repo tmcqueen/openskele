@@ -56,6 +56,12 @@ pub enum HostEvent {
         plugin_id: String,
         state: PluginState,
     },
+    /// A document's text was replaced by someone other than its editor (an
+    /// agent); open editors should reload it.
+    DocumentChanged {
+        uri: String,
+        version: u32,
+    },
     DocumentSaved {
         uri: String,
         version: u32,

@@ -173,11 +173,46 @@ mod scripted {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("b.txt");
         std::fs::write(&path, "before\n").unwrap();
+        // Open in an editor, no unsaved edits: the editor must see the agent's text.
+        let doc = workbench.documents().open(&path).unwrap();
         let mut events = workbench.bus().subscribe();
         let session = workbench.new_agent_session("scripted").await.unwrap();
         workbench.agent_prompt(&session, format!("write {}", path.display())).await.unwrap();
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "written\n");
-        assert!(std::iter::from_fn(|| events.try_recv().ok()).any(|e| matches!(e, HostEvent::DocumentSaved { .. })));
+        assert_eq!(workbench.documents().text(&doc.uri).unwrap(), "written\n");
+        let seen: Vec<_> = std::iter::from_fn(|| events.try_recv().ok()).collect();
+        assert!(seen.iter().any(|e| matches!(e, HostEvent::DocumentChanged { uri, .. } if *uri == doc.uri)));
+        assert!(seen.iter().any(|e| matches!(e, HostEvent::DocumentSaved { .. })));
+        workbench.close_agent_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn write_refuses_unsaved_edits() {
+        let Some(workbench) = setup() else { return };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("c.txt");
+        std::fs::write(&path, "disk\n").unwrap();
+        let doc = workbench.documents().open(&path).unwrap();
+        workbench.documents().set_text(&doc.uri, "my unsaved work\n").unwrap();
+        let session = workbench.new_agent_session("scripted").await.unwrap();
+        let stop = workbench.agent_prompt(&session, format!("write {}", path.display())).await.unwrap();
+        assert_eq!(stop, StopReason::Error, "the agent was told the write failed");
+        assert_eq!(workbench.documents().text(&doc.uri).unwrap(), "my unsaved work\n");
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), "disk\n");
+        workbench.close_agent_session(&session).await;
+    }
+
+    #[tokio::test]
+    async fn read_after_write_sees_later_disk_changes() {
+        let Some(workbench) = setup() else { return };
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("d.txt");
+        std::fs::write(&path, "first\n").unwrap();
+        let session = workbench.new_agent_session("scripted").await.unwrap();
+        workbench.agent_prompt(&session, format!("write {}", path.display())).await.unwrap();
+        std::fs::write(&path, "changed outside\n").unwrap(); // e.g. git checkout
+        workbench.agent_prompt(&session, format!("read {}", path.display())).await.unwrap();
+        assert_eq!(texts(&workbench.agent_transcript(&session).unwrap().entries).last().unwrap(), "changed outside");
         workbench.close_agent_session(&session).await;
     }
 
@@ -311,7 +346,13 @@ mod scripted {
         .await
         .expect("no AgentSessionEnded");
         assert_eq!(workbench.grants().len(), 0);
-        assert!(workbench.agent_transcript(&session).is_err(), "the ended session is gone");
+        // The conversation stays readable, with one error saying what happened.
+        let transcript = workbench.agent_transcript(&session).unwrap();
+        let errors = transcript.entries.iter().filter(|e| matches!(e, Entry::Error { .. })).count();
+        assert_eq!(errors, 1, "{:?}", transcript.entries);
+        assert!(matches!(workbench.agent_prompt(&session, "hello".into()).await, Err(skele_core::Error::Agent { .. })));
+        workbench.close_agent_session(&session).await;
+        assert!(workbench.agent_transcript(&session).is_err(), "closing forgets it");
     }
 
     #[tokio::test]
