@@ -69,6 +69,7 @@ pub(crate) struct Inner {
     pub(crate) tools: ToolRegistry,
     pub(crate) grants: GrantStore,
     pub(crate) agents: crate::agent::AgentRegistry,
+    pub(crate) agent_sessions: crate::agent::AgentSessions,
     pub(crate) mcp: tokio::sync::OnceCell<Arc<crate::mcp::McpListener>>,
     pub(crate) log: Mutex<LogState>,
     pub(crate) log_flag: Option<PathBuf>,
@@ -101,6 +102,7 @@ impl Workbench {
                 tools: Default::default(),
                 grants: Default::default(),
                 agents: Default::default(),
+                agent_sessions: Default::default(),
                 mcp: Default::default(),
                 log: Default::default(),
                 // An empty directory (`SKELE_LOG_DIR=`) means no flag.
@@ -206,6 +208,7 @@ impl Workbench {
     }
 
     pub async fn shutdown(&self) {
+        self.close_agent_sessions();
         if let Some(listener) = self.inner.mcp.get() {
             listener.close();
         }

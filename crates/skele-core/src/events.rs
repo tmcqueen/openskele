@@ -41,6 +41,17 @@ pub enum HostEvent {
     },
     /// Open the command palette overlay.
     ShowCommandPalette,
+    /// One transcript entry of an agent session changed or was added; same index means replace.
+    AgentUpdate {
+        session: String,
+        index: u32,
+        entry: crate::agent::Entry,
+    },
+    /// An agent session ended: closed, or the agent exited.
+    AgentSessionEnded {
+        session: String,
+        reason: String,
+    },
     PluginState {
         plugin_id: String,
         state: PluginState,

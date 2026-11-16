@@ -10,6 +10,13 @@ use skele_protocol::manifest::AgentContribution;
 
 use crate::{Error, Result, Workbench};
 
+mod session;
+mod transcript;
+
+pub(crate) use session::AgentSessions;
+pub use session::StopReason;
+pub use transcript::{Entry, PermissionOption, PlanEntry, Transcript};
+
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(rename_all = "camelCase")]
@@ -21,7 +28,6 @@ pub struct AgentInfo {
 }
 
 /// What it takes to start an agent.
-#[allow(dead_code)] // read by the ACP client, which comes next
 #[derive(Debug, Clone)]
 pub(crate) struct AgentEntry {
     pub(crate) info: AgentInfo,
@@ -36,7 +42,6 @@ pub struct AgentRegistry {
     agents: RwLock<BTreeMap<String, AgentEntry>>,
 }
 
-#[allow(dead_code)] // `get` is used by the ACP client, which comes next
 impl AgentRegistry {
     pub(crate) fn register(&self, entry: AgentEntry) -> Result<()> {
         let mut agents = self.agents.write().unwrap();
