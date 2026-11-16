@@ -40,9 +40,9 @@ export function createBars(dock: DockviewApi, onSelect: (bar: BarId, id: string 
   let warnedShared = false;
 
   function containersOf(snapshot: Snapshot, bar: BarId): ContainerInfo[] {
-    // Only containers with something in them get an icon.
+    // Only containers with something in them get an icon: views, or content of their own.
     return snapshot.containers.filter(
-      (c) => c.bar === bar && snapshot.views.some((v) => v.container === c.id),
+      (c) => c.bar === bar && (c.builtinContent || snapshot.views.some((v) => v.container === c.id)),
     );
   }
 

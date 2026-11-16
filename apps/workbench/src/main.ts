@@ -4,6 +4,7 @@
 import "@vscode/codicons/dist/codicon.css";
 import { createDockview, themeDark, themeLight, type DockviewApi, type IContentRenderer } from "dockview-core/dist/dockview-core.js";
 
+import { createAgentPane } from "./agent";
 import { createBars, type Bars } from "./bars";
 import { h } from "./dom";
 import { commands, connect, onHostEvent, run, type Layout, type PluginState, type Snapshot } from "./host";
@@ -28,6 +29,8 @@ let settings: SettingsPane | undefined;
 let titleBar: TitleBar | undefined;
 const trees = new Map<string, Tree>();
 const pluginStates = new Map<string, PluginState>();
+// Lives for the whole page, so a session survives its container being hidden.
+const agentPane = createAgentPane();
 // Lives for the whole page, so it follows output while the Output panel is closed.
 const output = createOutputPanel(
   { channels: () => commands.outputChannels(), read: (c) => commands.outputRead(c), clear: async (c) => void (await commands.outputClear(c)) },
@@ -65,6 +68,10 @@ function createComponent({ name }: { name: string }): IContentRenderer {
       return {
         element,
         init: (parameters) => {
+          if (parameters.params.container === "workbench.agent") {
+            element.append(agentPane.element);
+            return;
+          }
           inner = createContainer(parameters.params.container);
           inner.init(parameters);
           element.append(inner.element);
@@ -178,6 +185,7 @@ async function start(): Promise<void> {
     switch (event.type) {
       case "contributionsChanged":
         void loadSnapshot().then(() => settings?.reload());
+        void agentPane.refresh();
         break;
       case "layoutChanged":
         layout = event.layout;
@@ -205,6 +213,10 @@ async function start(): Promise<void> {
         void settings?.reload();
         if (event.keys.some((key) => APPEARANCE.includes(key))) void loadAppearance();
         break;
+      case "agentUpdate":
+      case "agentSessionEnded":
+        agentPane.onEvent(event);
+        break;
       case "pluginState":
         pluginStates.set(event.pluginId, event.state);
         renderStatus();
@@ -213,6 +225,7 @@ async function start(): Promise<void> {
   });
   await connect();
   await output.start();
+  await agentPane.refresh();
   await loadSnapshot();
   await loadAppearance();
   // A reload keeps the host's panels; only a fresh start (just the output) opens Settings.
