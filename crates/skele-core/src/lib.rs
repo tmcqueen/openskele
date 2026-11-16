@@ -14,6 +14,7 @@ pub mod events;
 pub mod keybindings;
 pub mod layout;
 pub mod menus;
+pub mod output;
 pub mod plugin;
 pub mod pty;
 pub mod views;

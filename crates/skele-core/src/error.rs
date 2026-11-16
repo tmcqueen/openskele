@@ -16,6 +16,8 @@ pub enum Error {
     DuplicateContainer(String),
     #[error("no such panel is open: {0}")]
     UnknownPanel(String),
+    #[error("unknown output channel: {0}")]
+    UnknownChannel(String),
     #[error("unknown plugin: {0}")]
     UnknownPlugin(String),
     #[error("unknown setting: {0}")]

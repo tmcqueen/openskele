@@ -111,7 +111,7 @@ impl Workbench {
         for dir in dirs {
             match self.install_plugin(&dir) {
                 Ok(id) => installed.push(id),
-                Err(e) => self.bus().message(MessageLevel::Error, format!("{}: {e}", dir.display()), None),
+                Err(e) => self.notify(MessageLevel::Error, &format!("{}: {e}", dir.display()), None),
             }
         }
         installed
@@ -265,7 +265,7 @@ impl Workbench {
             Err(e) => {
                 *session = None;
                 self.set_plugin_state(&plugin, PluginState::Failed);
-                self.bus().message(MessageLevel::Error, e.to_string(), Some(&plugin.manifest.name));
+                self.notify(MessageLevel::Error, &e.to_string(), Some(&plugin.manifest.name));
                 Err(e)
             }
         }
@@ -295,11 +295,12 @@ impl Workbench {
 
         // stdout carries the protocol, so stderr is the plugin's log.
         let stderr = BufReader::new(child.stderr.take().expect("stderr is piped"));
-        let (bus, terminal) = (self.bus().clone(), manifest.name.clone());
+        let (weak, channel) = (Arc::downgrade(&self.inner), manifest.name.clone());
         tokio::spawn(async move {
             let mut lines = stderr.lines();
             while let Ok(Some(line)) = lines.next_line().await {
-                bus.emit(HostEvent::TerminalData { terminal: terminal.clone(), data: format!("{line}\r\n") });
+                let Some(inner) = weak.upgrade() else { break };
+                Workbench { inner }.output(&channel, &format!("{line}\r\n"));
             }
         });
 
@@ -409,14 +410,12 @@ impl Handler for PluginHandler {
             match method.as_str() {
                 WindowShowMessage::METHOD => {
                     let params: ShowMessageParams = parse(params)?;
-                    bus.message(params.level, params.message, Some(name));
+                    workbench.notify(params.level, &params.message, Some(name));
                 }
                 TerminalWrite::METHOD => {
                     let params: TerminalWriteParams = parse(params)?;
-                    bus.emit(HostEvent::TerminalData {
-                        terminal: params.terminal.unwrap_or_else(|| name.clone()),
-                        data: params.data,
-                    });
+                    let channel = params.terminal.unwrap_or_else(|| name.clone());
+                    workbench.output(&channel, &params.data);
                 }
                 ViewRefresh::METHOD => {
                     let params: ViewRefreshParams = parse(params)?;
@@ -432,8 +431,13 @@ impl Handler for PluginHandler {
             Ok(())
         })();
         if let Err(e) = outcome {
-            bus.emit(HostEvent::TerminalData { terminal: name.clone(), data: format!("[host] {method}: {e}\r\n") });
+            workbench.output(name, &format!("[host] {method}: {e}\r\n"));
         }
+    }
+
+    fn stray_output(&self, line: String) {
+        let Some((workbench, plugin)) = self.context() else { return };
+        workbench.output(&plugin.manifest.name, &format!("{line}\r\n"));
     }
 
     fn closed(&self) {
@@ -441,7 +445,7 @@ impl Handler for PluginHandler {
         let state = *plugin.state.lock().unwrap();
         if state == PluginState::Running {
             workbench.set_plugin_state(&plugin, PluginState::Failed);
-            workbench.bus().message(
+            workbench.notify(
                 MessageLevel::Warning,
                 "plugin exited unexpectedly; it will restart when next needed",
                 Some(&plugin.manifest.name),

@@ -41,7 +41,8 @@ cargo run -p skele-core --example headless -- plugins hello.greet Ferris
 
 Plugins are loaded from `plugins/` in development builds, from `plugins/` under
 the app data directory, and from `SKELE_PLUGINS_DIR`. The workspace folder is
-the first CLI argument or `SKELE_WORKSPACE`.
+the first CLI argument or `SKELE_WORKSPACE`. `--log-dir <path>` (or
+`SKELE_LOG_DIR`) writes the output channels to files there; see below.
 
 ## Plugins
 
@@ -52,8 +53,8 @@ one of its commands runs or one of its views is shown, or at startup if it
 lists the `onStartup` activation event, and is restarted on demand if it exits.
 
 The protocol is JSON-RPC 2.0 with LSP-style `Content-Length` framing on
-stdin/stdout; stderr is the plugin's log. It opens with a versioned
-`initialize` handshake.
+stdin/stdout; stderr is the plugin's log (see Output channels). It opens with
+a versioned `initialize` handshake.
 
 | Direction | Methods |
 | --- | --- |
@@ -97,10 +98,34 @@ gets a `workbench.focusContainer.<id>` command.
 `Mod+Alt+B` toggle them. If both are set to the same side, the secondary bar
 is drawn on the opposite one.
 
+The Output panel is a panel like the others: close it, and View → Show
+Output (`Mod+Shift+U`) brings it back.
+
 The layout (bars and open panels) belongs to the core, not the webview: it is
 in the snapshot, every change arrives as a `layoutChanged` event, and clicks
 in the webview are requests to the core. Terminals run in the core too and
 keep their last 64 KiB of output, so a page reload re-attaches to them.
+
+## Output channels
+
+Diagnostic text is kept per source, like VS Code's Output panel. Each plugin
+has a channel named after it, fed by its stderr, by any stray line on its
+stdout that is not part of the protocol, and by `terminal/write` (which can
+also name another channel). The `Workbench` channel holds the host's own
+messages, including every notification shown as a toast. Each channel keeps its
+last 10,000 lines in the core, so a page reload loses nothing.
+
+The Output panel picks a channel from a dropdown, replays it and follows it;
+the button beside it clears the channel. The choice is remembered.
+
+Channels can also be written to files, one folder per run
+(`<dir>/<YYYYMMDD-HHMMSS>/<channel>.log`), flushed on every write so `tail -f`
+works. Files are written when the app is started with `--log-dir <path>` or
+`SKELE_LOG_DIR`, which override the settings, or else when
+`output.logToFile` is on **and** `output.logDirectory` is set. A relative
+directory is inside the workspace. The settings apply immediately; turning
+logging on first writes what each channel already holds. Clearing a channel
+does not touch its file.
 
 ## Settings
 

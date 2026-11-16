@@ -42,6 +42,9 @@ pub fn specta_builder() -> tauri_specta::Builder<Wry> {
             commands::document_open,
             commands::document_set_text,
             commands::document_save,
+            commands::output_channels,
+            commands::output_read,
+            commands::output_clear,
             commands::layout_set_active_container,
             commands::layout_set_active_panel,
             commands::layout_close_panel,
@@ -60,6 +63,7 @@ pub fn specta_builder() -> tauri_specta::Builder<Wry> {
 pub struct Builder {
     plugin_dirs: Vec<PathBuf>,
     workspace: Option<PathBuf>,
+    log_dir: Option<PathBuf>,
 }
 
 impl Builder {
@@ -80,12 +84,19 @@ impl Builder {
         self
     }
 
+    /// Writes output channels to files under this directory, whatever the
+    /// `output.*` settings say.
+    pub fn log_dir(mut self, dir: impl Into<PathBuf>) -> Self {
+        self.log_dir = Some(dir.into());
+        self
+    }
+
     /// Builds the plugin. It creates every window that `tauri.conf.json`
     /// declares with `"create": false`, framed according to the
     /// `window.titleBarStyle` setting; windows Tauri creates itself keep the
     /// system frame.
     pub fn build(self) -> TauriPlugin<Wry> {
-        let Self { mut plugin_dirs, workspace } = self;
+        let Self { mut plugin_dirs, workspace, log_dir } = self;
         let specta = specta_builder();
 
         tauri::plugin::Builder::new(PLUGIN_NAME)
@@ -94,6 +105,7 @@ impl Builder {
                 let workbench = Workbench::new(WorkbenchOptions {
                     user_settings: Some(app.path().app_config_dir()?.join("settings.json")),
                     workspace,
+                    log_dir,
                 })?;
                 plugin_dirs.push(app.path().app_data_dir()?.join("plugins"));
                 for dir in &plugin_dirs {

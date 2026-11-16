@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-output-clear"
+description = "Enables the output_clear command without any pre-configured scope."
+commands.allow = ["output_clear"]
+
+[[permission]]
+identifier = "deny-output-clear"
+description = "Denies the output_clear command without any pre-configured scope."
+commands.deny = ["output_clear"]

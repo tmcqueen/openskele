@@ -10,6 +10,7 @@ import { commands, connect, onHostEvent, run, type Layout, type PluginState, typ
 import { chordOf, normalizeChord } from "./keys";
 import { createMainArea, loadedEditor, OUTPUT, type MainArea } from "./layout";
 import { closePalette, togglePalette } from "./palette";
+import { createOutputPanel } from "./renderers/output";
 import { createOutput, createPtyTerminal, retheme as rethemeTerminals, setFont } from "./renderers/terminal";
 import { createTree, type Tree } from "./renderers/tree";
 import { createSettings, type SettingsPane } from "./settings";
@@ -27,7 +28,12 @@ let settings: SettingsPane | undefined;
 let titleBar: TitleBar | undefined;
 const trees = new Map<string, Tree>();
 const pluginStates = new Map<string, PluginState>();
-const output = createOutput();
+// Lives for the whole page, so it follows output while the Output panel is closed.
+const output = createOutputPanel(
+  { channels: () => commands.outputChannels(), read: (c) => commands.outputRead(c), clear: async (c) => void (await commands.outputClear(c)) },
+  createOutput(),
+  globalThis.localStorage,
+);
 
 /** A container's side panel: each of its views under a heading. */
 function createContainer(containerId: string): IContentRenderer {
@@ -104,9 +110,14 @@ function createComponent({ name }: { name: string }): IContentRenderer {
   }
 }
 
+/** Redraws bars and panels. Callers do not wait, so failures are shown here. */
 async function render(): Promise<void> {
-  bars.render(snapshot, layout);
-  await main.reconcile(layout);
+  try {
+    bars.render(snapshot, layout);
+    await main.reconcile(layout);
+  } catch (error) {
+    toast("error", `Could not update the layout: ${error}`);
+  }
 }
 
 function renderStatus(): void {
@@ -158,7 +169,6 @@ async function start(): Promise<void> {
     // The host's layout has no notion of dragged-around panels.
     disableDnd: true,
   });
-  dock.addPanel({ id: OUTPUT, component: OUTPUT, title: "Output" });
   bars = createBars(dock, (bar, id) => {
     commands.layoutSetActiveContainer(bar, id).catch((error) => toast("error", String(error)));
   });
@@ -179,8 +189,14 @@ async function start(): Promise<void> {
       case "message":
         toast(event.level, event.message, event.source);
         break;
-      case "terminalData":
-        output.write(event.data);
+      case "outputAppended":
+        output.append(event.channel, event.text);
+        break;
+      case "outputChannelsChanged":
+        void output.channelsChanged();
+        break;
+      case "outputCleared":
+        output.cleared(event.channel);
         break;
       case "viewRefresh":
         void trees.get(event.viewId)?.refresh();
@@ -196,10 +212,11 @@ async function start(): Promise<void> {
     }
   });
   await connect();
+  await output.start();
   await loadSnapshot();
   await loadAppearance();
-  // A reload keeps the host's panels; only a fresh start opens Settings.
-  if (!layout.panels.length) await run("workbench.openSettings");
+  // A reload keeps the host's panels; only a fresh start (just the output) opens Settings.
+  if (layout.panels.every((panel) => panel.kind === "output")) await run("workbench.openSettings");
   dock.getPanel(OUTPUT)?.api.setSize({ height: 220 });
 
   // Capture phase, so chords win over whatever widget has focus.

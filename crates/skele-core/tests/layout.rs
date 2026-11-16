@@ -27,7 +27,7 @@ async fn open_settings_command_opens_panel() {
         _ => None,
     })
     .await;
-    assert_eq!(layout.panels, vec![Panel::Settings]);
+    assert_eq!(layout.panels, vec![Panel::Output, Panel::Settings]);
 }
 
 #[tokio::test]
@@ -36,7 +36,7 @@ async fn open_file_twice_one_panel() {
     for _ in 0..2 {
         workbench.execute_command("workbench.openFile", vec![json!("/tmp/x")]).await.unwrap();
     }
-    assert_eq!(workbench.layout().panels, vec![Panel::Editor { path: "/tmp/x".into() }]);
+    assert_eq!(workbench.layout().panels, vec![Panel::Output, Panel::Editor { path: "/tmp/x".into() }]);
 }
 
 #[tokio::test]
@@ -77,7 +77,7 @@ fn position_setting_is_applied_at_startup() {
     let tmp = tempfile::tempdir().unwrap();
     let file = tmp.path().join("settings.json");
     std::fs::write(&file, r#"{ "workbench.secondaryBar.position": "top" }"#).unwrap();
-    let options = skele_core::WorkbenchOptions { user_settings: Some(file), workspace: None };
+    let options = skele_core::WorkbenchOptions { user_settings: Some(file), ..Default::default() };
     let workbench = Workbench::new(options).unwrap();
     assert_eq!(workbench.layout().secondary.position, BarPosition::Top);
 }
@@ -197,6 +197,7 @@ fn snapshot_has_layout_and_containers() {
 #[test]
 fn panel_calls_validate_ids() {
     let workbench = workbench();
+    workbench.close_panel("output").unwrap();
     assert!(matches!(workbench.close_panel("settings"), Err(Error::UnknownPanel(_))));
     assert!(matches!(workbench.set_active_panel("settings"), Err(Error::UnknownPanel(_))));
     workbench.open_panel(Panel::Settings);
@@ -230,4 +231,21 @@ async fn new_terminal_adds_panel_and_close_kills_it() {
     assert!(workbench.terminals().attach(id).is_ok());
     workbench.close_panel(&format!("terminal:{id}")).unwrap();
     assert!(matches!(workbench.terminals().attach(id), Err(Error::UnknownTerminal(_))));
+}
+
+#[tokio::test]
+async fn output_starts_open_and_show_output_reopens_it() {
+    let workbench = workbench();
+    assert_eq!(workbench.layout().panels, vec![Panel::Output]);
+    let bound = workbench.keybindings().list();
+    assert!(bound.iter().any(|b| b.key == "Mod+Shift+U" && b.command == "workbench.showOutput"));
+    let view = workbench.menubar().into_iter().find(|m| m.title == "View").unwrap();
+    assert!(format!("{:?}", view.items).contains("workbench.showOutput"));
+
+    workbench.close_panel("output").unwrap();
+    assert!(workbench.layout().panels.is_empty());
+    workbench.execute_command("workbench.showOutput", vec![]).await.unwrap();
+    let layout = workbench.layout();
+    assert_eq!(layout.panels, vec![Panel::Output]);
+    assert_eq!(layout.active_panel.as_deref(), Some("output"));
 }

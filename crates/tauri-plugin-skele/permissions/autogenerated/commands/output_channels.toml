@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-output-channels"
+description = "Enables the output_channels command without any pre-configured scope."
+commands.allow = ["output_channels"]
+
+[[permission]]
+identifier = "deny-output-channels"
+description = "Denies the output_channels command without any pre-configured scope."
+commands.deny = ["output_channels"]

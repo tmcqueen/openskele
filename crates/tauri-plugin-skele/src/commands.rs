@@ -178,6 +178,26 @@ pub fn document_save(workbench: State<'_, Workbench>, uri: String) -> Result<u32
     workbench.save_document(&uri).map_err(message)
 }
 
+/// Output channel names, the Workbench channel first.
+#[tauri::command]
+#[specta::specta]
+pub fn output_channels(workbench: State<'_, Workbench>) -> Vec<String> {
+    workbench.output_channels()
+}
+
+/// The recent text of an output channel.
+#[tauri::command]
+#[specta::specta]
+pub fn output_read(workbench: State<'_, Workbench>, channel: String) -> Result<String> {
+    workbench.output_read(&channel).map_err(message)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn output_clear(workbench: State<'_, Workbench>, channel: String) -> Result<()> {
+    workbench.output_clear(&channel).map_err(message)
+}
+
 /// Opens a container's side panel on a bar, or collapses it with `null`.
 #[tauri::command]
 #[specta::specta]
