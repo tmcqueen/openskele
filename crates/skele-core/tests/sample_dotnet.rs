@@ -11,6 +11,29 @@ use skele_core::plugin::PluginState;
 use skele_core::{HostEvent, Workbench, WorkbenchOptions};
 
 const PLUGIN: &str = "sample.dotnet";
+
+/// Builds the sample once per test run: two concurrent `dotnet build`s of the
+/// same project fight over the same output files.
+fn built() -> std::path::PathBuf {
+    static BUILD: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
+    let plugin_dir = sample("sample-dotnet");
+    let result = BUILD.get_or_init(|| {
+        let build = std::process::Command::new("dotnet")
+            .args(["build", "-c", "Release", "-nologo", "-v", "quiet"])
+            .current_dir(sample("sample-dotnet"))
+            .output()
+            .map_err(|e| e.to_string())?;
+        if build.status.success() {
+            Ok(())
+        } else {
+            Err(String::from_utf8_lossy(&build.stdout).into_owned())
+        }
+    });
+    if let Err(output) = result {
+        panic!("dotnet build failed:\n{output}");
+    }
+    plugin_dir
+}
 const VIEW: &str = "dotnet.runtime";
 
 #[tokio::test]
@@ -19,13 +42,7 @@ async fn host_and_dotnet_plugin_round_trip() {
         eprintln!("skipping: dotnet is not installed");
         return;
     }
-    let plugin_dir = sample("sample-dotnet");
-    let build = std::process::Command::new("dotnet")
-        .args(["build", "-c", "Release", "-nologo", "-v", "quiet"])
-        .current_dir(&plugin_dir)
-        .output()
-        .unwrap();
-    assert!(build.status.success(), "dotnet build failed:\n{}", String::from_utf8_lossy(&build.stdout));
+    let plugin_dir = built();
 
     let workbench = Workbench::new(WorkbenchOptions::default()).unwrap();
     let mut events = workbench.bus().subscribe();
@@ -97,13 +114,7 @@ async fn dotnet_tool_round_trip() {
         eprintln!("skipping: dotnet is not installed");
         return;
     }
-    let plugin_dir = sample("sample-dotnet");
-    let build = std::process::Command::new("dotnet")
-        .args(["build", "-c", "Release", "-nologo", "-v", "quiet"])
-        .current_dir(&plugin_dir)
-        .output()
-        .unwrap();
-    assert!(build.status.success(), "dotnet build failed:\n{}", String::from_utf8_lossy(&build.stdout));
+    let plugin_dir = built();
 
     let workbench = Workbench::new(WorkbenchOptions::default()).unwrap();
     workbench.install_plugin(&plugin_dir).unwrap();
