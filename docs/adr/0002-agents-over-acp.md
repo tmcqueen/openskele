@@ -58,6 +58,6 @@ which is the whole point of an extensible workbench.
 - Revisit: crate API when 5.x changes; Claude adapter package name.
 
 ## Action Items
-1. [ ] Spike `agent-client-protocol` against `plugins/agent-scripted`.
-2. [ ] `agent/` module, transcript, IPC, chat renderer.
-3. [ ] `plugins/agent-claude` manifest.
+1. [x] Spike `agent-client-protocol` against `plugins/agent-scripted`.
+2. [x] `agent/` module, transcript, IPC, chat renderer.
+3. [x] `plugins/agent-claude` manifest (adapter: `@agentclientprotocol/claude-agent-acp`).
