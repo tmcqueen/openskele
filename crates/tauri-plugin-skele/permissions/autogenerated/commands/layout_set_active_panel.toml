@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-layout-set-active-panel"
+description = "Enables the layout_set_active_panel command without any pre-configured scope."
+commands.allow = ["layout_set_active_panel"]
+
+[[permission]]
+identifier = "deny-layout-set-active-panel"
+description = "Denies the layout_set_active_panel command without any pre-configured scope."
+commands.deny = ["layout_set_active_panel"]

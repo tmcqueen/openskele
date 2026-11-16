@@ -16,14 +16,22 @@ export const commands = {
 	configSections: (options?: InvokeOptions) => __TAURI_INVOKE<ConfigSection_Serialize[]>("plugin:skele|config_sections", undefined, options),
 	/**  Sets a setting in one scope; a `null` value clears it there. */
 	configSet: (key: string, value: Value | null, scope: Scope, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|config_set", { key, value, scope }, options),
-	/**  Starts a shell on a PTY and streams its output over `on_event`. */
-	terminalOpen: (cols: number, rows: number, onEvent: Channel<TerminalEvent>, options?: InvokeOptions) => __TAURI_INVOKE<number>("plugin:skele|terminal_open", { cols, rows, onEvent }, options),
+	/**
+	 *  Streams a core-owned terminal to the caller: its scrollback as one `data`
+	 *  event, `exit` if it has already ended, then live output.
+	 */
+	terminalAttach: (id: number, onEvent: Channel<TerminalEvent>, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|terminal_attach", { id, onEvent }, options),
 	terminalWrite: (id: number, data: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|terminal_write", { id, data }, options),
 	terminalResize: (id: number, cols: number, rows: number, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|terminal_resize", { id, cols, rows }, options),
 	terminalClose: (id: number, options?: InvokeOptions) => __TAURI_INVOKE<void>("plugin:skele|terminal_close", { id }, options),
 	documentOpen: (path: string, options?: InvokeOptions) => __TAURI_INVOKE<DocumentSnapshot>("plugin:skele|document_open", { path }, options),
 	documentSetText: (uri: string, text: string, options?: InvokeOptions) => __TAURI_INVOKE<number>("plugin:skele|document_set_text", { uri, text }, options),
 	documentSave: (uri: string, options?: InvokeOptions) => __TAURI_INVOKE<number>("plugin:skele|document_save", { uri }, options),
+	/**  Opens a container's side panel on a bar, or collapses it with `null`. */
+	layoutSetActiveContainer: (bar: BarId, id: string | null, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|layout_set_active_container", { bar, id }, options),
+	layoutSetActivePanel: (id: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|layout_set_active_panel", { id }, options),
+	/**  Closes a panel; a terminal panel's shell ends with it. */
+	layoutClosePanel: (id: string, options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|layout_close_panel", { id }, options),
 	/**  The title bar style in effect for this run. */
 	chrome: (options?: InvokeOptions) => __TAURI_INVOKE<Chrome>("plugin:skele|chrome", undefined, options),
 	windowStartDrag: (options?: InvokeOptions) => __TAURI_INVOKE<null>("plugin:skele|window_start_drag", undefined, options),
@@ -33,6 +41,27 @@ export const commands = {
 };
 
 /* Types */
+export type Bar = Bar_Serialize | Bar_Deserialize;
+
+/**  Which app bar a view container sits on. */
+export type BarId = "primary" | "secondary";
+
+export type BarPosition = "left" | "right" | "top";
+
+export type Bar_Deserialize = {
+	position: BarPosition,
+	visible: boolean,
+	/**  The container whose side panel is open; `None` collapses the panel. */
+	activeContainer?: string | null,
+};
+
+export type Bar_Serialize = {
+	position: BarPosition,
+	visible: boolean,
+	/**  The container whose side panel is open; `None` collapses the panel. */
+	activeContainer: string | null,
+};
+
 /**
  *  The chrome in effect. Decided once at startup, so changing the setting
  *  takes a restart.
@@ -114,6 +143,30 @@ export type ConfigSection_Serialize = {
 	properties: ConfigProperty_Serialize[],
 };
 
+export type ContainerInfo = ContainerInfo_Serialize | ContainerInfo_Deserialize;
+
+export type ContainerInfo_Deserialize = {
+	id: string,
+	title: string,
+	/**  Codicon name. */
+	icon: string,
+	bar: BarId,
+	order: number,
+	/**  Contributing plugin; `None` for built-ins. */
+	source?: string | null,
+};
+
+export type ContainerInfo_Serialize = {
+	id: string,
+	title: string,
+	/**  Codicon name. */
+	icon: string,
+	bar: BarId,
+	order: number,
+	/**  Contributing plugin; `None` for built-ins. */
+	source: string | null,
+};
+
 export type DocumentSnapshot = {
 	uri: string,
 	path: string,
@@ -129,22 +182,20 @@ export type HostEvent_Deserialize =
 { type: "contributionsChanged" } | { type: "message"; level: MessageLevel; message: string; source?: string | null } | 
 /**  Text for a named output terminal. */
 { type: "terminalData"; terminal: string; data: string } | { type: "viewRefresh"; viewId: string } | { type: "configChanged"; keys: string[] } | 
-/**
- *  A built-in command asks the front end to reveal one of its panels.
- *  `arg` qualifies it where that makes sense: the path for `editor`.
- */
-{ type: "openPanel"; panel: string; arg?: string | null } | { type: "pluginState"; pluginId: string; state: PluginState } | { type: "documentSaved"; uri: string; version: number };
+/**  The bars or open panels changed; this is the whole new layout. */
+{ type: "layoutChanged"; layout: Layout_Deserialize } | 
+/**  Open the command palette overlay. */
+{ type: "showCommandPalette" } | { type: "pluginState"; pluginId: string; state: PluginState } | { type: "documentSaved"; uri: string; version: number };
 
 export type HostEvent_Serialize = 
 /**  Commands, menus, keybindings, views or config schemas changed; re-fetch the snapshot. */
 { type: "contributionsChanged" } | { type: "message"; level: MessageLevel; message: string; source: string | null } | 
 /**  Text for a named output terminal. */
 { type: "terminalData"; terminal: string; data: string } | { type: "viewRefresh"; viewId: string } | { type: "configChanged"; keys: string[] } | 
-/**
- *  A built-in command asks the front end to reveal one of its panels.
- *  `arg` qualifies it where that makes sense: the path for `editor`.
- */
-{ type: "openPanel"; panel: string; arg: string | null } | { type: "pluginState"; pluginId: string; state: PluginState } | { type: "documentSaved"; uri: string; version: number };
+/**  The bars or open panels changed; this is the whole new layout. */
+{ type: "layoutChanged"; layout: Layout_Serialize } | 
+/**  Open the command palette overlay. */
+{ type: "showCommandPalette" } | { type: "pluginState"; pluginId: string; state: PluginState } | { type: "documentSaved"; uri: string; version: number };
 
 export type Keybinding = Keybinding_Serialize | Keybinding_Deserialize;
 
@@ -160,6 +211,24 @@ export type Keybinding_Serialize = {
 	key: string,
 	command: string,
 	source: string | null,
+};
+
+export type Layout = Layout_Serialize | Layout_Deserialize;
+
+export type Layout_Deserialize = {
+	primary: Bar_Deserialize,
+	secondary: Bar_Deserialize,
+	/**  In the order they were opened. */
+	panels: Panel[],
+	activePanel?: string | null,
+};
+
+export type Layout_Serialize = {
+	primary: Bar_Serialize,
+	secondary: Bar_Serialize,
+	/**  In the order they were opened. */
+	panels: Panel[],
+	activePanel: string | null,
 };
 
 export type Menu = Menu_Serialize | Menu_Deserialize;
@@ -181,6 +250,9 @@ export type Menu_Serialize = {
 };
 
 export type MessageLevel = "info" | "warning" | "error";
+
+/**  Something open in the main area. */
+export type Panel = { kind: "settings" } | { kind: "editor"; path: string } | { kind: "terminal"; id: number };
 
 export type Platform = "linux" | "macos" | "windows";
 
@@ -209,7 +281,9 @@ export type Snapshot_Deserialize = {
 	commands: CommandInfo_Deserialize[],
 	menubar: Menu_Deserialize[],
 	keybindings: Keybinding_Deserialize[],
+	containers: ContainerInfo_Deserialize[],
 	views: ViewInfo[],
+	layout: Layout_Deserialize,
 	plugins: PluginInfo[],
 	hasWorkspace: boolean,
 };
@@ -219,7 +293,9 @@ export type Snapshot_Serialize = {
 	commands: CommandInfo_Serialize[],
 	menubar: Menu_Serialize[],
 	keybindings: Keybinding_Serialize[],
+	containers: ContainerInfo_Serialize[],
 	views: ViewInfo[],
+	layout: Layout_Serialize,
 	plugins: PluginInfo[],
 	hasWorkspace: boolean,
 };
@@ -271,11 +347,10 @@ export type ViewInfo = {
 	id: string,
 	title: string,
 	kind: ViewKind,
-	location: ViewLocation,
+	/**  Id of the view container it is shown in. */
+	container: string,
 	/**  Plugin that supplies the view's data. */
 	pluginId: string,
 };
 
 export type ViewKind = "tree" | "list";
-
-export type ViewLocation = "sidebar" | "panel";

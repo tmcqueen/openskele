@@ -18,7 +18,8 @@
       ]
     },
     "keybindings": [{ "command": "hello.greet", "key": "Mod+Alt+G" }],
-    "views": [{ "id": "hello.greetings", "title": "Greetings", "kind": "tree", "location": "sidebar" }],
+    "viewContainers": [{ "id": "hello.container", "title": "Hello", "icon": "comment-discussion" }],
+    "views": [{ "id": "hello.greetings", "title": "Greetings", "kind": "tree", "container": "hello.container" }],
     "configuration": {
       "title": "Hello",
       "properties": {

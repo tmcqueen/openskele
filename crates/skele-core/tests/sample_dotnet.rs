@@ -32,6 +32,11 @@ async fn host_and_dotnet_plugin_round_trip() {
     assert_eq!(workbench.install_plugin(&plugin_dir).unwrap(), PLUGIN);
     assert_eq!(state(&workbench, PLUGIN), PluginState::Idle);
 
+    // Its view lives in its own container on the secondary bar.
+    let container = workbench.containers().get("dotnet.container").expect("sample container");
+    assert_eq!(container.bar, skele_core::protocol::manifest::BarId::Secondary);
+    assert_eq!(workbench.views().get(VIEW).unwrap().container, "dotnet.container");
+
     // The command reads a setting back through the host before answering.
     let reply = workbench.execute_command("dotnet.describe", vec![]).await.unwrap();
     let described = reply.as_str().unwrap().to_owned();

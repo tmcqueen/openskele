@@ -563,3 +563,73 @@ body {
 .toast.error {
   border-left-color: var(--error);
 }
+
+/* App bars: Dockview edge groups whose tabs are view-container icons. */
+#dock .bar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  font-size: 22px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+#dock .dv-active-tab .bar-icon,
+#dock .bar-icon:hover {
+  color: var(--text);
+}
+
+/* Icon tabs are not document tabs: no outline, shoulders or padding. */
+#dock .dv-tabs-container:has(.bar-icon) {
+  padding: 0;
+}
+
+#dock .dv-tab:has(.bar-icon) {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+#dock .dv-tabs-container .dv-tab:has(.bar-icon)::before,
+#dock .dv-tabs-container .dv-tab:has(.bar-icon)::after {
+  content: none;
+}
+
+/* The active icon is marked on the side facing its panel. */
+#dock .dv-tab.dv-active-tab .bar-icon.side-left {
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+
+#dock .dv-tab.dv-active-tab .bar-icon.side-right {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+#dock .dv-tab.dv-active-tab .bar-icon.side-top {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* Without this a wide tree sets the content's minimum width, and in a
+   right-hand bar the excess spills out past the left edge. */
+#dock .dv-content-container {
+  min-width: 0;
+}
+
+.container-views {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: auto;
+}
+
+.view-title {
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}

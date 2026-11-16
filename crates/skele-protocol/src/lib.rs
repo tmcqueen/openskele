@@ -44,4 +44,25 @@ mod tests {
         assert!(!is_compatible("1.4.0", "2.0.0"));
         assert!(!is_compatible("1.0.0", "nope"));
     }
+
+    #[test]
+    fn manifest_parses_view_containers() {
+        let m: manifest::Manifest = serde_json::from_value(serde_json::json!({
+            "id": "a.b", "name": "B", "version": "0", "protocol": "0.1",
+            "main": { "command": "x" },
+            "contributes": {
+                "viewContainers": [{ "id": "b.box", "title": "Box", "icon": "package" },
+                                   { "id": "b.side", "title": "Side", "icon": "info", "bar": "secondary", "order": 3 }],
+                "views": [{ "id": "b.v", "title": "V", "container": "b.box" },
+                          { "id": "b.w", "title": "W", "location": "sidebar" }]
+            }
+        }))
+        .unwrap();
+        let c = &m.contributes;
+        assert_eq!(c.view_containers[0].bar, manifest::BarId::Primary);
+        assert_eq!(c.view_containers[1].bar, manifest::BarId::Secondary);
+        assert_eq!(c.view_containers[1].order, 3);
+        assert_eq!(c.views[0].container.as_deref(), Some("b.box"));
+        assert_eq!(c.views[1].container, None); // old `location` is ignored
+    }
 }

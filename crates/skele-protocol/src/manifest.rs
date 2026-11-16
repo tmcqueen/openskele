@@ -48,6 +48,9 @@ pub struct Contributes {
     pub menus: BTreeMap<String, Vec<MenuContribution>>,
     #[serde(default)]
     pub keybindings: Vec<KeybindingContribution>,
+    /// Icon-strip entries on the app bars; views are placed in them by id.
+    #[serde(default)]
+    pub view_containers: Vec<ViewContainerContribution>,
     #[serde(default)]
     pub views: Vec<ViewContribution>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -90,12 +93,31 @@ pub enum ViewKind {
     List,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+/// Which app bar a view container sits on.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, JsonSchema)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
 #[serde(rename_all = "camelCase")]
-pub enum ViewLocation {
-    Sidebar,
-    Panel,
+pub enum BarId {
+    Primary,
+    Secondary,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewContainerContribution {
+    pub id: String,
+    pub title: String,
+    /// Codicon name, e.g. `package`.
+    pub icon: String,
+    #[serde(default = "default_bar")]
+    pub bar: BarId,
+    /// Lower sorts first within a bar.
+    #[serde(default)]
+    pub order: i32,
+}
+
+fn default_bar() -> BarId {
+    BarId::Primary
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -105,16 +127,14 @@ pub struct ViewContribution {
     pub title: String,
     #[serde(default = "default_view_kind")]
     pub kind: ViewKind,
-    #[serde(default = "default_view_location")]
-    pub location: ViewLocation,
+    /// Id of the view container to show the view in; the built-in
+    /// `workbench.views` container when absent.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub container: Option<String>,
 }
 
 fn default_view_kind() -> ViewKind {
     ViewKind::Tree
-}
-
-fn default_view_location() -> ViewLocation {
-    ViewLocation::Sidebar
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

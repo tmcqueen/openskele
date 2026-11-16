@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 use std::sync::RwLock;
 
 use serde::Serialize;
-use skele_protocol::manifest::{ViewKind, ViewLocation};
+use skele_protocol::manifest::ViewKind;
 
 #[derive(Debug, Clone, Serialize)]
 #[cfg_attr(feature = "specta", derive(specta::Type))]
@@ -11,7 +11,8 @@ pub struct ViewInfo {
     pub id: String,
     pub title: String,
     pub kind: ViewKind,
-    pub location: ViewLocation,
+    /// Id of the view container it is shown in.
+    pub container: String,
     /// Plugin that supplies the view's data.
     pub plugin_id: String,
 }

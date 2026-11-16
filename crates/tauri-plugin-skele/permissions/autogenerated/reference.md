@@ -10,13 +10,16 @@ Lets a webview render the workbench and drive it through its commands.
 - `allow-view-children`
 - `allow-config-sections`
 - `allow-config-set`
-- `allow-terminal-open`
+- `allow-terminal-attach`
 - `allow-terminal-write`
 - `allow-terminal-resize`
 - `allow-terminal-close`
 - `allow-document-open`
 - `allow-document-set-text`
 - `allow-document-save`
+- `allow-layout-set-active-container`
+- `allow-layout-set-active-panel`
+- `allow-layout-close-panel`
 - `allow-chrome`
 - `allow-window-start-drag`
 - `allow-window-minimize`
@@ -217,6 +220,84 @@ Denies the execute_command command without any pre-configured scope.
 <tr>
 <td>
 
+`skele:allow-layout-close-panel`
+
+</td>
+<td>
+
+Enables the layout_close_panel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-layout-close-panel`
+
+</td>
+<td>
+
+Denies the layout_close_panel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-layout-set-active-container`
+
+</td>
+<td>
+
+Enables the layout_set_active_container command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-layout-set-active-container`
+
+</td>
+<td>
+
+Denies the layout_set_active_container command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:allow-layout-set-active-panel`
+
+</td>
+<td>
+
+Enables the layout_set_active_panel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-layout-set-active-panel`
+
+</td>
+<td>
+
+Denies the layout_set_active_panel command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `skele:allow-snapshot`
 
 </td>
@@ -269,6 +350,32 @@ Denies the subscribe command without any pre-configured scope.
 <tr>
 <td>
 
+`skele:allow-terminal-attach`
+
+</td>
+<td>
+
+Enables the terminal_attach command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`skele:deny-terminal-attach`
+
+</td>
+<td>
+
+Denies the terminal_attach command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `skele:allow-terminal-close`
 
 </td>
@@ -288,32 +395,6 @@ Enables the terminal_close command without any pre-configured scope.
 <td>
 
 Denies the terminal_close command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`skele:allow-terminal-open`
-
-</td>
-<td>
-
-Enables the terminal_open command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`skele:deny-terminal-open`
-
-</td>
-<td>
-
-Denies the terminal_open command without any pre-configured scope.
 
 </td>
 </tr>
