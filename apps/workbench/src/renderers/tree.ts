@@ -14,13 +14,6 @@ export interface Tree {
   refresh(): Promise<void>;
 }
 
-const ICONS: Record<string, string> = {
-  play: "▶",
-  gear: "⚙",
-  comment: "✎",
-  file: "▤",
-  folder: "▣",
-};
 
 export function createTree(options: TreeOptions): Tree {
   const element = h("div", { class: "tree", role: "tree" });
@@ -36,7 +29,8 @@ export function createTree(options: TreeOptions): Tree {
         "div",
         { class: "tree-row", role: "treeitem", tabIndex: 0, title: item.tooltip ?? "" },
         h("span", { class: "tree-twistie" }, item.collapsible ? (open ? "▾" : "▸") : ""),
-        h("span", { class: "tree-icon" }, (item.icon && ICONS[item.icon]) || ""),
+        // Icons are codicon names.
+        h("span", { class: item.icon ? `tree-icon codicon codicon-${item.icon}` : "tree-icon" }),
         h("span", { class: "tree-label" }, item.label),
         item.description && h("span", { class: "tree-description" }, item.description),
       );

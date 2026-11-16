@@ -1,5 +1,5 @@
 // xterm.js surfaces: a read-only output console fed by host events, and an
-// interactive terminal bound to a PTY the host owns.
+// interactive view of a PTY the host owns.
 
 import { Channel } from "@tauri-apps/api/core";
 import { FitAddon } from "@xterm/addon-fit";
@@ -92,37 +92,24 @@ export function createOutput(): { element: HTMLElement; write(data: string): voi
   return { element, write: (data) => terminal.write(data) };
 }
 
-export function createPtyTerminal(): { element: HTMLElement; dispose(): void } {
-  const { element, terminal, onFit, dispose } = surface({ readOnly: false });
-  let id: number | undefined;
-  let disposed = false;
+/**
+ * Shows a terminal the host owns. Closing the view leaves the shell running;
+ * ending it is the layout's job.
+ */
+export function createPtyTerminal(id: number): { element: HTMLElement; dispose(): void } {
+  const { element, terminal, onFit, refit, dispose } = surface({ readOnly: false });
 
   const events = new Channel<TerminalEvent>();
   events.onmessage = (event) => {
     if (event.type === "data") terminal.write(event.data);
     else terminal.write("\r\n[process exited]\r\n");
   };
-
-  commands.terminalOpen(terminal.cols, terminal.rows, events).then(
-    (opened) => {
-      id = opened;
-      if (disposed) void commands.terminalClose(opened);
-    },
-    (error) => terminal.write(`failed to start terminal: ${error}\r\n`),
+  commands.terminalAttach(id, events).then(
+    () => refit(),
+    (error) => terminal.write(`failed to attach to terminal ${id}: ${error}\r\n`),
   );
-  terminal.onData((data) => {
-    if (id !== undefined) void commands.terminalWrite(id, data);
-  });
-  onFit((cols, rows) => {
-    if (id !== undefined) void commands.terminalResize(id, cols, rows);
-  });
+  terminal.onData((data) => void commands.terminalWrite(id, data));
+  onFit((cols, rows) => void commands.terminalResize(id, cols, rows));
 
-  return {
-    element,
-    dispose: () => {
-      disposed = true;
-      if (id !== undefined) void commands.terminalClose(id);
-      dispose();
-    },
-  };
+  return { element, dispose };
 }
