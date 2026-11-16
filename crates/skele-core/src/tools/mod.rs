@@ -113,10 +113,6 @@ impl Workbench {
         };
         Ok(outcome.unwrap_or_else(|e| ToolCallResult::error(e.to_string())))
     }
-
-    async fn call_plugin_tool(&self, _plugin: &str, _name: &str, _arguments: Value) -> Result<ToolCallResult> {
-        Err(Error::Other("plugin tools are not wired yet".into()))
-    }
 }
 
 #[cfg(test)]
