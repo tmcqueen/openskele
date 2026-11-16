@@ -4,7 +4,7 @@
 
 **Goal:** Fix the five peer-review bugs (#3–#7) so the webview, IPC and native menu change layout and report errors only through the Rust core, and fix the nine CodeRabbit findings on PR #1 (M2's tools and MCP server).
 
-**Architecture:** Tasks 1–5 each move a decision the webview or an IPC command makes on its own back into `skele-core`: panel closes wait for the core (#3), views load when the core's layout shows them (#4), initial panels are set by the host once (#5), terminals close only through the layout (#6), and failed commands are reported through `Workbench::notify` (#7). Tasks 6–9 fix the MCP server's connection lifecycle, keep open editors in step with agent edits, reject tool schemas MCP cannot call, and make the bridge and tests portable to Windows.
+**Architecture:** Tasks 1–5 each move a decision the webview or an IPC command makes on its own back into `skele-core`: panel closes wait for the core (#3), views load when the core's layout shows them (#4), initial panels are set by the host once (#5), terminals close only through the layout (#6), and failed commands are reported through `Workbench::notify` (#7). Tasks 6–9 fix the MCP server's connection lifecycle, keep open editors in step with agent edits, reject tool schemas MCP cannot call, and make the bridge and tests portable to Windows. Task 10 accepts integral numbers such as `1.0` wherever a tool schema says `integer`.
 
 **Tech Stack:** Rust (`skele-core`, `tauri-plugin-skele`), TypeScript webview on Dockview 8.9, `bun test` with happy-dom.
 
@@ -227,7 +227,29 @@ Findings: [CR7](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542
 - [ ] **Step 4:** Run the Global Constraints checks — PASS.
 - [ ] **Step 5: Commit** — `git commit -m "mcp: listener and bridge share one Windows pipe name; unix-only test gated (CR7 CR8)"`
 
-### Task 10: End-to-end check and docs
+### Task 10: Integral numbers are accepted where a tool schema says `integer` (PR #1 P3)
+
+Finding: [P3 on `builtin.rs:76`](https://github.com/tmcqueen/openskele/pull/1#discussion_r4588772659). JSON Schema's `integer` includes numbers with no fractional part, so `{"start": 0.0, "end": 1.0}` passes validation (checked against jsonschema 0.61.2) and then fails ``invalid type: floating point `1.0`, expected usize`` in `serde_json::from_value`. The same holds for `id` in `terminal_write` and `terminal_read` (`u32`).
+
+**Files:**
+- Modify: `crates/skele-core/src/tools/mod.rs:107-117` (`Workbench::call_tool`)
+- Test: `crates/skele-core/src/tools/mod.rs` tests, `crates/skele-core/src/tools/builtin.rs` tests
+
+**Interfaces:**
+- Produces: `fn integral_numbers(value: Value) -> Value` in `tools/mod.rs` — walks objects and arrays and replaces each number that is finite, has no fractional part and fits `i64` (negative) or `u64` (non-negative) with that integer; every other value is unchanged (fractional numbers, strings such as `"1.0"`, numbers beyond `u64`).
+- Produces: `call_tool` applies `integral_numbers` after schema validation and before dispatch, so built-in handlers and plugin tools (`tool/call`) both receive `1` rather than `1.0`. Fractional and negative offsets are still refused by the schema; an integral value beyond the target type (e.g. `1e20` for `usize`, `2^32` for `u32`) is still refused when the handler deserializes it. Every refusal stays a `ToolCallResult` with `is_error: true`.
+
+- [ ] **Step 1: Failing tests**
+  - `tools/mod.rs` `integral_numbers_become_integers`: `{"a": 1.0, "b": [2.0, 0.5, -3.0], "c": "1.0", "d": 1e20}` → `{"a": 1, "b": [2, 0.5, -3], "c": "1.0", "d": 1e20}`.
+  - `builtin.rs` `document_edit_accepts_integral_float_offsets`: on an open document with text `hello\n`, `document_edit` with `start: 0.0, end: 1.0, text: "j"` succeeds and `document_read` returns `jello\n`.
+  - `builtin.rs` `document_edit_refuses_fractional_negative_and_huge_offsets`: `start: 0.5`, `start: -1` and `start: 1e20` (each with `end: 1`) each give `is_error: true` and leave the text unchanged.
+  - `builtin.rs` `terminal_read_accepts_integral_float_id` (unix): `terminal_open`, then `terminal_read` with `id` as `<id>.0` succeeds.
+- [ ] **Step 2:** `cargo test -p skele-core integral document_edit_ terminal_read_accepts` — expected FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run the Global Constraints checks — PASS.
+- [ ] **Step 5: Commit** — `git commit -m "tools: integral numbers are integers after validation (PR #1 P3)"`
+
+### Task 11: End-to-end check and docs
 
 **Files:**
 - Modify: `docs/adr/0001-ui-state-owned-by-rust.md`, `docs/adr/0007-plugins-are-sidecar-processes.md`, `docs/adr/0012-output-channels-in-the-core.md` (tick the action items that name #3–#7; remove each "Known deviations" entry that is now fixed)
