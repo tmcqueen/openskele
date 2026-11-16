@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust (`skele-core`, `tauri-plugin-skele`), TypeScript webview on Dockview 8.9, `bun test` with happy-dom.
 
-**Spec:** GitHub issues [#3](https://github.com/tmcqueen/openskele/issues/3), [#4](https://github.com/tmcqueen/openskele/issues/4), [#5](https://github.com/tmcqueen/openskele/issues/5), [#6](https://github.com/tmcqueen/openskele/issues/6), [#7](https://github.com/tmcqueen/openskele/issues/7) (each has acceptance criteria), plus `docs/adr/0001-ui-state-owned-by-rust.md`, `0007-plugins-are-sidecar-processes.md` and `0012-output-channels-in-the-core.md`. All five were confirmed still present at `origin/m3-agent-interface` (`4643df9`). CodeRabbit's review of [PR #1](https://github.com/tmcqueen/openskele/pull/1) at `f6cb166`: nine inline comments, all verified as valid; M3 changes none of the flagged files except `workbench.rs` (shutdown now revokes agent grants first, which softens finding 3). A code review of [PR #2](https://github.com/tmcqueen/openskele/pull/2) at `4643df9` (findings numbered R2-1 to R2-4 here, all verified against the code): R2-1 agent writes can replace unsynced typing (Standards P2 and Spec P1, one cause), R2-2 a reload loses the agent session list, R2-3 switching sessions can show the wrong transcript, R2-4 writes to unopened files skip save notifications. CodeRabbit's review of [PR #8](https://github.com/tmcqueen/openskele/pull/8) (these docs): settings defaults are never validated (Task 14), Task 5's webview toast bypassed `Workbench::notify`, and the bindings check could not pass before its commit (both fixed in this plan's text).
+**Spec:** GitHub issues [#3](https://github.com/tmcqueen/openskele/issues/3), [#4](https://github.com/tmcqueen/openskele/issues/4), [#5](https://github.com/tmcqueen/openskele/issues/5), [#6](https://github.com/tmcqueen/openskele/issues/6), [#7](https://github.com/tmcqueen/openskele/issues/7) (each has acceptance criteria), plus `docs/adr/0001-ui-state-owned-by-rust.md`, `0007-plugins-are-sidecar-processes.md` and `0012-output-channels-in-the-core.md`. All five were confirmed still present at `origin/m3-agent-interface` (`4643df9`). CodeRabbit's review of [PR #1](https://github.com/tmcqueen/openskele/pull/1) at `f6cb166`: nine inline comments, all verified as valid; M3 changes none of the flagged files except `workbench.rs` (shutdown now revokes agent grants first, which softens finding 3). A code review of [PR #2](https://github.com/tmcqueen/openskele/pull/2) at `4643df9` (findings numbered R2-1 to R2-4 here, all verified against the code): R2-1 agent writes can replace unsynced typing (Standards P2 and Spec P1, one cause), R2-2 a reload loses the agent session list, R2-3 switching sessions can show the wrong transcript, R2-4 writes to unopened files skip save notifications. CodeRabbit's review of [PR #8](https://github.com/tmcqueen/openskele/pull/8) (these docs): settings defaults are never validated (Task 14), Task 5's webview toast bypassed `Workbench::notify`, and the bindings check could not pass before its commit (both fixed in this plan's text). Its second review added six findings, folded into Tasks 6, 7, 10, 11 and 13: `mcp()` during shutdown, the agent's check-then-write race, refused pushes discarding typing, `cargo test` filters, open counting for documents, and live updates while a transcript loads.
 
 **Base:** `main` after `m3-agent-interface` (which contains `m2-tools-mcp`) is merged. Line numbers below are at `4643df9`.
 
@@ -158,7 +158,7 @@ Findings: [CR1](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542
 **Interfaces:**
 - Produces: `serve(workbench, grant, reader, writer, stop: CancellationToken) -> Result<()>` (`tokio_util::sync::CancellationToken`, already a dependency via `tokio-util`). One token per connection, created before `serve_with_ct`, is cancelled by the revocation watcher, by `stop`, and when the connection ends; the watcher is a single task that `select!`s on revocations and the token, so it ends with the connection. Initialization runs under the token, so revoking during it ends the connection.
 - Produces: `McpListener` owns a listener-wide `CancellationToken` (each handler gets a child) and a `tokio::task::JoinSet` of handlers. `pub async fn close(&self)` cancels the token, aborts accepting, waits for every handler to finish, then removes the socket and folder. `Drop` still cancels and removes files without waiting.
-- Produces: `Inner.mcp: tokio::sync::Mutex<Option<Arc<McpListener>>>`. `Workbench::mcp()` starts and stores a listener when none is stored. `shutdown()` takes the stored listener and awaits `close()` after `close_agent_sessions()` and before `shutdown_plugins()`.
+- Produces: `Inner.mcp: tokio::sync::Mutex<Option<Arc<McpListener>>>`. `Workbench::mcp()` locks it and starts and stores a listener when none is stored. `shutdown()` locks it after `close_agent_sessions()`, awaits `close()` on the stored listener **while still holding the lock**, then clears the slot and unlocks, before `shutdown_plugins()`. A concurrent `mcp()` therefore waits until the old listener is fully closed; it never sees an empty slot mid-shutdown and never starts a listener that this shutdown would miss. Once `shutdown()` has finished, `mcp()` starts a new listener (the reuse case tested below). ([PR #8 review](https://github.com/tmcqueen/openskele/pull/8#discussion_r4589504644))
 
 - [ ] **Step 1: Failing tests**
   - `service.rs` `disconnect_ends_the_watcher` (a unit test, so it can see `inner`): serve over `tokio::io::duplex`, drop the client end, await `serve`; then poll for up to 1 s until `Arc::strong_count(&workbench.inner) == 1`, which holds only once the watcher has dropped its `Workbench` clone.
@@ -166,6 +166,7 @@ Findings: [CR1](https://github.com/tmcqueen/openskele/pull/1#discussion_r4586542
   - `service.rs` `stop_token_ends_serve`: cancel `stop` on an initialized connection; `serve` returns within 2 s.
   - `tests/mcp.rs` (new, in `skele-core`) `shutdown_waits_for_connections`: connect a client through `workbench.mcp()` (raw `interprocess` stream, token line, rmcp client over it), call `workbench.shutdown().await`; afterwards the client's `waiting()` completes within 2 s and the socket file is gone.
   - `tests/mcp.rs` `mcp_after_shutdown_is_a_new_listener`: `mcp()`, `shutdown()`, `mcp()` again → a different path that exists.
+  - `tests/mcp.rs` `mcp_during_shutdown_waits_for_close`: connect a client so `close()` has a handler to wait for, start `shutdown()` and, before it finishes, call `mcp()` concurrently. `mcp()` returns only after `shutdown()` has returned, with a path different from the old one; the old socket file is gone and the old client's `waiting()` has completed.
   - `bridge.rs` `revoked_grant_closes_connection`: after `revoke`, send nothing; `tokio::time::timeout(Duration::from_secs(5), client.waiting())` completes.
 - [ ] **Step 2:** `cargo test -p skele-core mcp && cargo test -p skele-core --test mcp && cargo test -p skele-mcp-bridge` — expected FAIL.
 - [ ] **Step 3:** Implement.
@@ -179,26 +180,35 @@ Findings:
 - R2-1 (PR #2 review: Standards P2 and Spec P1, one cause). `editor.ts:54-59` reload replaces the Monaco model without checking for local edits that have not reached the core. For up to 150 ms after a keystroke (the debounce) the core still has the document as clean, so `write_for_agent`'s unsaved-edits check passes, the agent's write is applied, and the reload replaces what the user just typed. Edits typed while the reload awaits `documentOpen` are lost the same way.
 
 **Files:**
-- Modify: `crates/skele-core/src/document.rs` (`set_text`), `crates/skele-core/src/workbench.rs` (new `edit_document`), `crates/skele-core/src/tools/builtin.rs:240-243`, `crates/skele-core/src/agent/session.rs:362-368` (`write_for_agent` uses the new method), `crates/skele-core/src/error.rs`
+- Modify: `crates/skele-core/src/document.rs` (`set_text`, new `replace_if_clean`), `crates/skele-core/src/workbench.rs` (new `edit_document`), `crates/skele-core/src/tools/builtin.rs:240-243`, `crates/skele-core/src/agent/session.rs:357-374` (`write_for_agent` uses `replace_if_clean`), `crates/skele-core/src/error.rs` (`StaleDocument`, `UnsavedChanges`)
 - Modify: `crates/tauri-plugin-skele/src/commands.rs:172-174` (`document_set_text`), `apps/workbench/src/renderers/editor.ts`
 - Test: `crates/skele-core/src/document.rs` tests, `crates/skele-core/src/tools/builtin.rs` tests, `apps/workbench/src/renderers/editor.test.ts` (new; mock `monaco-editor` as `layout.test.ts` mocks the editor module)
 
 **Interfaces:**
-- Produces: `DocumentStore::set_text(&self, uri: &str, text: &str, base: Option<u32>) -> Result<u32>` — with `Some(base)`, `Err(Error::StaleDocument { uri: String, current: u32 })` when `base` is not the current version, and nothing changes. `None` replaces unconditionally; only `write_for_agent` passes `None`, after its own unsaved-edits check.
+- Produces: `DocumentStore::set_text(&self, uri: &str, text: &str, base: u32) -> Result<u32>` — `Err(Error::StaleDocument { uri: String, current: u32 })` when `base` is not the current version, and nothing changes. Every caller passes the version it last saw.
+- Produces: `DocumentStore::replace_if_clean(&self, uri: &str, text: &str) -> Result<u32>` — under the store's one lock, `Err(Error::UnsavedChanges(String))` (display: `"{path} has unsaved changes in the editor; save or discard them first"`, the message `write_for_agent` uses today) if the document is dirty, else replaces the text and returns the new version. `write_for_agent` uses it instead of checking `dirty()` and then writing, so no editor push can land between the check and the write. ([PR #8 review](https://github.com/tmcqueen/openskele/pull/8#discussion_r4589504660))
 - Produces: `Workbench::edit_document(&self, uri: &str, start: usize, end: usize, text: &str) -> Result<u32>` — `documents().edit(..)`, then emits `HostEvent::DocumentChanged { uri, version }`. The `document_edit` tool calls it.
-- Produces: IPC `document_set_text(uri, text, base: u32) -> Result<u32>`. On `StaleDocument` the IPC command calls `notify(MessageLevel::Warning, "<file name> changed elsewhere; your last edit was not applied", None)` before returning the error (Global Constraints: the core reports, the webview adds no toast). The editor tracks the version it last synced (from `documentOpen`, each successful `documentSetText`, and each reload); on a `StaleDocument` rejection it reloads from the host.
-- Produces (R2-1): the editor makes the core see local edits at once. The first content change after a sync is pushed immediately (leading edge); later changes keep the 150 ms trailing debounce. That first push marks the document dirty in the core, so an agent write that arrives afterwards is refused by `write_for_agent`'s existing check.
-- Produces (R2-1): a reload never replaces local edits. It does nothing while a push is pending or in flight, and it records `model.getAlternativeVersionId()` before awaiting `documentOpen` and applies the text only if that id is unchanged afterwards. When it skips, the editor's pending push carries an old `base`, is refused as `StaleDocument`, and the core's warning above is shown. The only edits that can still be lost are those typed within one IPC round trip of an agent write that reached the core first, and the warning names the file when that happens.
+- Produces: IPC `document_set_text(uri, text, base: u32) -> Result<u32>`. On `StaleDocument` the IPC command calls `notify(MessageLevel::Warning, "<file name> was changed while you were typing; choose which version to keep", None)` before returning the error (Global Constraints: the core reports, the webview adds no toast). The editor tracks the version it last synced (from `documentOpen`, each successful `documentSetText`, and each reload).
+- Produces (R2-1): the editor makes the core see local edits at once. The first content change after a sync is pushed immediately (leading edge); later changes keep the 150 ms trailing debounce. That first push marks the document dirty in the core, so an agent write that arrives afterwards is refused by `replace_if_clean`.
+- Produces (R2-1): a reload never replaces local edits. It does nothing while a push is pending or in flight, and it records `model.getAlternativeVersionId()` before awaiting `documentOpen` and applies the text only if that id is unchanged afterwards.
+- Produces (R2-1): a refused push never discards typing. ([PR #8 review](https://github.com/tmcqueen/openskele/pull/8#discussion_r4589504680)) If the agent's write reached the core before the editor's first push, every later push is stale too, so the editor must not reload: on `StaleDocument` it enters a conflict state. It keeps the model as typed, stops pushing (edits made meanwhile stay local), and shows a bar inside the editor element (`.editor-conflict`) reading "This file was changed while you were typing." with two buttons:
+  - **Keep my version**: `documentOpen` for the current version, then `documentSetText(uri, model.getValue(), current.version)`. Success leaves the conflict state and resumes normal pushing; another `StaleDocument` keeps the bar up.
+  - **Use the other version**: reload from the host (replacing the model) and leave the conflict state.
+  Nothing is lost without the user choosing it. A `DocumentChanged` event while in conflict is ignored (the bar already offers the other version).
 
 - [ ] **Step 1: Failing tests**
-  - `document.rs` `stale_set_text_is_refused`: open (v1), `edit` (v2), `set_text(uri, "x", Some(1))` → `StaleDocument { current: 2, .. }`, text unchanged; `set_text(uri, "x", Some(2))` → `Ok(3)`; `set_text(uri, "y", None)` → `Ok(4)`.
+  - `document.rs` `stale_set_text_is_refused`: open (v1), `edit` (v2), `set_text(uri, "x", 1)` → `StaleDocument { current: 2, .. }`, text unchanged; `set_text(uri, "x", 2)` → `Ok(3)`.
+  - `document.rs` `replace_if_clean_refuses_dirty`: open (clean) → `replace_if_clean(uri, "a")` is `Ok`; `set_text(uri, "typed", <current>)` (now dirty) → `replace_if_clean(uri, "b")` is `Err(UnsavedChanges(_))` and the text is still `typed`.
   - `builtin.rs` `document_edit_tells_editors`: subscribe, call `document_edit` → one `HostEvent::DocumentChanged` with the returned version.
-  - `editor.test.ts` `"a stale push reloads instead of overwriting"`: stub `documentSetText` to reject with a `StaleDocument` message once; type into the model, advance the debounce; expect `documentOpen` called again (reload) and no toast from the webview.
+  - `editor.test.ts` `"a refused push keeps the typing and offers a choice"`: stub `documentSetText` to reject with a `StaleDocument` message; type; the model keeps the typed text, `documentOpen` was not called again, `.editor-conflict` is shown, more typing sends no further `documentSetText`, and the webview shows no toast.
+  - `editor.test.ts` `"keep my version re-sends against the current version"`: in conflict, stub `documentOpen` to return version 7; click **Keep my version** → `documentSetText(uri, <model text>, 7)`; on success the bar is gone and the next edit is pushed again.
+  - `editor.test.ts` `"use the other version reloads"`: in conflict, click **Use the other version** → the model shows `documentOpen`'s text and the bar is gone.
+
   - `editor.test.ts` `"the first edit after a sync is pushed at once"`: type one character; `documentSetText` is called before any timer advances; a second character is pushed only after 150 ms.
   - `editor.test.ts` `"a reload during unsynced typing keeps the typing"`: hold `documentSetText` unresolved, type, call `reloadDocument(uri)`; the model still holds the typed text and `documentOpen` was not called.
   - `editor.test.ts` `"typing while a reload is awaited keeps the typing"`: hold `documentOpen` unresolved, call `reloadDocument(uri)`, type, then resolve `documentOpen` with other text; the model keeps the typed text.
-  - `tests/agents.rs` `agent_write_refused_after_editor_push`: open a file, `documents().set_text(uri, "typed", Some(1))` (what the editor's first push does), then the scripted agent's `fs/write_text_file` to that path is refused and the buffer still reads `typed`.
-- [ ] **Step 2:** `cargo test -p skele-core stale document_edit_tells && cargo test -p skele-core --test agents agent_write_refused && bun run --cwd apps/workbench test editor` — expected FAIL.
+  - `tests/agents.rs` `agent_write_refused_after_editor_push`: open a file, `documents().set_text(uri, "typed", 1)` (what the editor's first push does), then the scripted agent's `fs/write_text_file` to that path is refused and the buffer still reads `typed`.
+- [ ] **Step 2:** `cargo test -p skele-core -- stale replace_if_clean document_edit_tells && cargo test -p skele-core --test agents agent_write_refused && bun run --cwd apps/workbench test editor` — expected FAIL. (Cargo takes one test name before `--`; several go after it.) ([PR #8 review](https://github.com/tmcqueen/openskele/pull/8#discussion_r4589504690))
 - [ ] **Step 3:** Implement; `bun run gen:bindings`.
 - [ ] **Step 4:** Run the Global Constraints checks — PASS.
 - [ ] **Step 5: Commit** — `git commit -m "documents: agent edits reach editors without overwriting typing (CR4 R2-1)"`
@@ -258,7 +268,7 @@ Finding: [P3 on `builtin.rs:76`](https://github.com/tmcqueen/openskele/pull/1#di
   - `builtin.rs` `document_edit_accepts_integral_float_offsets`: on an open document with text `hello\n`, `document_edit` with `start: 0.0, end: 1.0, text: "j"` succeeds and `document_read` returns `jello\n`.
   - `builtin.rs` `document_edit_refuses_fractional_negative_and_huge_offsets`: `start: 0.5`, `start: -1` and `start: 1e20` (each with `end: 1`) each give `is_error: true` and leave the text unchanged.
   - `builtin.rs` `terminal_read_accepts_integral_float_id` (unix): `terminal_open`, then `terminal_read` with `id` as `<id>.0` succeeds.
-- [ ] **Step 2:** `cargo test -p skele-core integral document_edit_ terminal_read_accepts` — expected FAIL.
+- [ ] **Step 2:** `cargo test -p skele-core -- integral document_edit_ terminal_read_accepts` — expected FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run the Global Constraints checks — PASS.
 - [ ] **Step 5: Commit** — `git commit -m "tools: integral numbers are integers after validation (PR #1 P3)"`
@@ -268,18 +278,21 @@ Finding: [P3 on `builtin.rs:76`](https://github.com/tmcqueen/openskele/pull/1#di
 Finding: R2-4 (PR #2 review, Spec P2). `crates/skele-core/src/agent/session.rs:372` writes a file that is not open with `std::fs::write`, so neither `HostEvent::DocumentSaved` nor the plugins' `document/didSave` fires. The M3 plan says "open if needed; write = `set_text` then `save_document`".
 
 **Files:**
-- Modify: `crates/skele-core/src/agent/session.rs:357-374` (`write_for_agent`), `crates/skele-core/src/document.rs` (`close` is already there)
-- Test: `crates/skele-core/tests/agents.rs`
+- Modify: `crates/skele-core/src/agent/session.rs:357-374` (`write_for_agent`), `crates/skele-core/src/document.rs` (`Document` gains an open count; `open`, `close`)
+- Test: `crates/skele-core/src/document.rs` tests, `crates/skele-core/tests/agents.rs`
 
 **Interfaces:**
-- Consumes: `DocumentStore::set_text(uri, text, None)` (Task 7), `Workbench::save_document(uri)`.
-- Produces: `write_for_agent` for a file that is not open: create it empty if it does not exist (parent folders are not created; a missing folder is an error returned to the agent), `documents().open(path)`, `set_text(uri, content, None)`, `save_document(uri)`, then `documents().close(uri)` so the store still holds only documents an editor opened. The open-and-clean and open-and-dirty branches are unchanged.
+- Consumes: `DocumentStore::replace_if_clean(uri, text)` (Task 7), `Workbench::save_document(uri)`.
+- Produces: `Document` counts its opens. `DocumentStore::open` increments the count (also when the document is already open and its live buffer is returned); `close` decrements it and removes the document only when it reaches zero. An editor that opens a file while the agent holds its temporary open therefore keeps its buffer when the agent closes. Editors never close documents today, and their reloads also call `documentOpen`, which only keeps buffers open longer than before, never shorter. ([PR #8 review](https://github.com/tmcqueen/openskele/pull/8#discussion_r4589504697))
+- Produces: one `write_for_agent` path whether or not the file is open: create the file empty if it does not exist (parent folders are not created; a missing folder is an error returned to the agent), `documents().open(path)`, `replace_if_clean(uri, content)` (refused with `UnsavedChanges` if an editor has unsaved edits), emit `HostEvent::DocumentChanged`, `save_document(uri)`, then `documents().close(uri)`. Closing only drops the agent's own open, so a document an editor opened stays open.
 
-- [ ] **Step 1: Failing tests** in `tests/agents.rs` (scripted agent):
-  - `agent_write_to_unopened_file_announces_save`: subscribe, have the agent write `new.txt` (not open); the file holds the content, one `HostEvent::DocumentSaved` names its uri, and `documents().dirty(uri)` is `None` afterwards (closed again).
-  - `agent_write_creates_missing_file`: the path does not exist → it is created with the content and `DocumentSaved` is emitted.
-  - `agent_write_into_missing_folder_fails`: `missing/dir/new.txt` → the agent gets an error and nothing is created.
-- [ ] **Step 2:** `cargo test -p skele-core --test agents agent_write_` — expected FAIL.
+- [ ] **Step 1: Failing tests**
+  - `document.rs` `close_keeps_documents_others_opened`: `open` the same file twice, `close` once → `dirty(uri)` is still `Some`; `close` again → `None`.
+  - `tests/agents.rs` (scripted agent) `agent_write_keeps_an_editor_buffer`: open the file (as an editor would), have the agent write it; afterwards `dirty(uri)` is `Some(false)` and the buffer holds the agent's text.
+  - `tests/agents.rs` `agent_write_to_unopened_file_announces_save`: subscribe, have the agent write `new.txt` (not open); the file holds the content, one `HostEvent::DocumentSaved` names its uri, and `documents().dirty(uri)` is `None` afterwards (closed again).
+  - `tests/agents.rs` `agent_write_creates_missing_file`: the path does not exist → it is created with the content and `DocumentSaved` is emitted.
+  - `tests/agents.rs` `agent_write_into_missing_folder_fails`: `missing/dir/new.txt` → the agent gets an error and nothing is created.
+- [ ] **Step 2:** `cargo test -p skele-core close_keeps && cargo test -p skele-core --test agents agent_write_` — expected FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run the Global Constraints checks — PASS.
 - [ ] **Step 5: Commit** — `git commit -m "agents: writes to unopened files are saved through the document store (R2-4)"`
@@ -317,11 +330,15 @@ Finding: R2-3 (PR #2 review, Spec P2). `apps/workbench/src/agent.ts:71-74` (`sho
 - Test: `apps/workbench/src/agent.test.ts`
 
 **Interfaces:**
-- Produces: `show(id)` applies a transcript only if `current === id` when the response arrives. The chat records which session its content belongs to (`chat.set(transcript)` is called with that id alongside), and the answer callback sends `agentAnswerPermission(<that session id>, request, option)`, never `current`. `agentUpdate` events are already filtered by `event.session === current` and stay so.
+- Produces: `show(id)` applies a transcript only if `current === id` when the response arrives. The chat records which session its content belongs to (`chat.set(transcript)` is called with that id alongside), and the answer callback sends `agentAnswerPermission(<that session id>, request, option)`, never `current`. `agentUpdate` events are routed by session, not by `current` alone ([PR #8 review](https://github.com/tmcqueen/openskele/pull/8#discussion_r4589504709)):
+  - an update for the session whose transcript the chat shows is applied (`chat.update`);
+  - an update for the selected session whose transcript is still loading is held in a list for that session, and once its transcript arrives the pane calls `chat.set`, then replays the held updates in arrival order (an update replaces the entry at its index, so replaying ones older than the transcript leaves the same final entries), then clears the list;
+  - an update for any other session is dropped (its transcript is fetched fresh when it is shown), and held updates are discarded when the selection moves away before the transcript arrives.
 
 - [ ] **Step 1: Failing tests** in `agent.test.ts` (stub `agentTranscript` with promises resolved by hand):
   - `"a slow transcript for an earlier session is dropped"`: select A then B; resolve B's transcript, then A's; the chat shows B's entries.
   - `"permission answers go to the session the transcript belongs to"`: show A's transcript containing a pending permission request; switch the picker to B but hold B's transcript unresolved; the chat still shows A's transcript, and clicking the request's button calls `agentAnswerPermission` once, with A's id.
+  - `"updates for a loading session wait for its transcript"`: same setup (A shown, B selected, B's transcript held); deliver an `agentUpdate` for B adding a permission request at the next index → the chat still shows only A's entries and nothing of B's; resolve B's transcript → the chat shows B's entries followed by the held update, and its permission button answers with B's id.
 - [ ] **Step 2:** `bun run --cwd apps/workbench test agent` — expected FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** Run the Global Constraints checks — PASS.
@@ -364,6 +381,7 @@ Finding: CodeRabbit on PR #8 (`docs/adr/0010-settings-are-schema-driven.md:18`).
   - Start and close three agent sessions, then quit: no `skele-mcp-bridge` process remains and the socket folder under `$XDG_RUNTIME_DIR` is gone.
   - Start two agent sessions, reload the webview: the picker lists both with their labels and the previously selected one is shown; a pending permission request in it can still be answered.
   - Type into an open file and, within the debounce, have the scripted agent write that file: the agent's write is refused and the typed text stays.
+  - Have the scripted agent write an open file just before typing starts in it, so the editor's push is refused: the conflict bar appears, the typed text stays, **Keep my version** saves it, and doing it again with **Use the other version** shows the agent's text.
   - Have the scripted agent write a file that is not open: the sample plugin's output channel shows its `saved file://…` line.
 - [ ] **Step 2:** Update the four ADRs.
 - [ ] **Step 3: Commit** — `git commit -m "docs: review fixes recorded in ADRs"`
