@@ -47,5 +47,6 @@ is exactly the deferred external case.
   `confirm_mutations` in the MCP service.
 
 ## Action Items
-1. [ ] Annotate every built-in tool correctly; test the annotations.
+1. [x] Annotate every built-in tool correctly; test the annotations
+   (`annotations_match_table` on `m2-tools-mcp`, `a05a35d`; lands with M2).
 2. [ ] Follow-up: host-side confirmation, gated by `confirm_mutations`.
