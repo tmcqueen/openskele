@@ -45,11 +45,12 @@ impl Doc {
             .and_then(Value::as_array)
             .map(|r| r.iter().filter_map(Value::as_str).collect())
             .unwrap_or_default();
-        let params: Vec<Value> = definition
-            .get("properties")
-            .and_then(Value::as_object)
+        // By name, not by however the properties map happens to be ordered.
+        let mut properties: Vec<(&String, &Value)> =
+            definition.get("properties").and_then(Value::as_object).into_iter().flatten().collect();
+        properties.sort_by_key(|(name, _)| *name);
+        let params: Vec<Value> = properties
             .into_iter()
-            .flatten()
             .map(|(name, schema)| json!({ "name": name, "required": required.contains(&name.as_str()), "schema": schema }))
             .collect();
 
@@ -104,8 +105,23 @@ pub fn manifest_schema() -> Value {
 pub const OPENRPC_PATH: &str = "protocol/openrpc.json";
 pub const MANIFEST_SCHEMA_PATH: &str = "protocol/plugin-manifest.schema.json";
 
+/// Objects with their keys sorted at every level. Key order otherwise depends
+/// on whether some other crate in the build turned on serde_json's
+/// `preserve_order`, and the checked-in documents must not.
+fn sorted(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            Value::Object(keys.into_iter().map(|k| (k.clone(), sorted(&map[k]))).collect())
+        }
+        Value::Array(items) => Value::Array(items.iter().map(sorted).collect()),
+        other => other.clone(),
+    }
+}
+
 pub fn render(value: &Value) -> String {
-    let mut out = serde_json::to_string_pretty(value).expect("schema serializes");
+    let mut out = serde_json::to_string_pretty(&sorted(value)).expect("schema serializes");
     out.push('\n');
     out
 }
