@@ -6,6 +6,7 @@ use skele_protocol::manifest::BarId;
 
 use crate::containers::ContainerInfo;
 use crate::events::HostEvent;
+use crate::pty::TerminalOptions;
 use crate::{Error, Result, Workbench};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -224,6 +225,15 @@ impl Workbench {
             bar.active_container = Some(id.to_owned());
         });
         Ok(())
+    }
+
+    /// Starts a shell in the workspace and opens a panel for it.
+    pub fn new_terminal(&self) -> Result<u32> {
+        let shell = self.inner.config.get("terminal.shell").as_str().map(str::to_owned);
+        let cwd = self.inner.workspace.clone();
+        let id = self.inner.terminals.open(TerminalOptions { shell, cwd, cols: 80, rows: 24 })?;
+        self.open_panel(Panel::Terminal { id });
+        Ok(id)
     }
 
     pub fn toggle_bar(&self, bar: BarId) {

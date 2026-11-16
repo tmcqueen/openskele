@@ -166,3 +166,16 @@ fn unchanged_calls_emit_nothing() {
     std::thread::sleep(Duration::from_millis(10));
     assert!(events.try_recv().is_err());
 }
+
+#[cfg(unix)]
+#[tokio::test]
+async fn new_terminal_adds_panel_and_close_kills_it() {
+    let workbench = workbench();
+    workbench.execute_command("workbench.newTerminal", vec![]).await.unwrap();
+    let layout = workbench.layout();
+    let Some(Panel::Terminal { id }) = layout.panels.last().cloned() else { panic!("no terminal panel: {layout:?}") };
+    assert_eq!(layout.active_panel, Some(format!("terminal:{id}")));
+    assert!(workbench.terminals().attach(id).is_ok());
+    workbench.close_panel(&format!("terminal:{id}")).unwrap();
+    assert!(matches!(workbench.terminals().attach(id), Err(Error::UnknownTerminal(_))));
+}

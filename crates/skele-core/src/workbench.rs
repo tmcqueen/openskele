@@ -223,7 +223,9 @@ impl Workbench {
                 w.open_panel(Panel::Settings);
                 Ok(Value::Null)
             }),
-            ("workbench.newTerminal", "New Terminal", "menubar/View", "Mod+Shift+T", |_, _| Ok(Value::Null)),
+            ("workbench.newTerminal", "New Terminal", "menubar/View", "Mod+Shift+T", |w, _| {
+                Ok(json!(w.new_terminal()?))
+            }),
             ("workbench.togglePrimaryBar", "Toggle Primary Side Bar", "menubar/View", "Mod+B", |w, _| {
                 w.toggle_bar(BarId::Primary);
                 Ok(Value::Null)
