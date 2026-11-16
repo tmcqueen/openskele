@@ -26,6 +26,8 @@ pub trait Handler: Send + Sync + 'static {
     fn notification(&self, method: String, params: Value);
     /// The remote end closed the connection.
     fn closed(&self);
+    /// A line on the wire that is not part of the protocol, such as a stray print.
+    fn stray_output(&self, _line: String) {}
 }
 
 type Pending = HashMap<i64, oneshot::Sender<Result<Value, RpcError>>>;
@@ -60,7 +62,8 @@ impl Peer {
 
         let reading = peer.clone();
         tokio::spawn(async move {
-            while let Ok(Some(frame)) = read_frame(&mut reader).await {
+            while let Ok(Some(frame)) = read_frame(&mut reader, &mut |line| handler.stray_output(line.to_owned())).await
+            {
                 match Message::decode(&frame) {
                     Ok(Message::Request { id, method, params }) => {
                         let (handler, outgoing) = (handler.clone(), outgoing.clone());

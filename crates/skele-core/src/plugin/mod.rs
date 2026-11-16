@@ -435,6 +435,11 @@ impl Handler for PluginHandler {
         }
     }
 
+    fn stray_output(&self, line: String) {
+        let Some((workbench, plugin)) = self.context() else { return };
+        workbench.output(&plugin.manifest.name, &format!("{line}\r\n"));
+    }
+
     fn closed(&self) {
         let Some((workbench, plugin)) = self.context() else { return };
         let state = *plugin.state.lock().unwrap();

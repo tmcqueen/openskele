@@ -47,6 +47,13 @@ async fn host_and_sample_plugin_round_trip() {
     let reply = workbench.execute_command("hello.greet", vec![]).await.unwrap();
     assert_eq!(reply, json!("Hello, World!"));
     assert_eq!(common::state(&workbench, PLUGIN), PluginState::Running);
+
+    // The sample prints one line to stdout on purpose; it lands in its channel.
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !workbench.output_read("Hello").unwrap_or_default().contains("sample.hello stdout check") {
+        assert!(std::time::Instant::now() < deadline, "stray stdout never reached the Hello channel");
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
     let message = expect(&mut events, |e| match e {
         HostEvent::Message { message, source, .. } => Some((message.clone(), source.clone())),
         _ => None,

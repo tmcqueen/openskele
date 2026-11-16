@@ -14,6 +14,9 @@ runPlugin({
 
   activate(host) {
     const greetings: string[] = [];
+    // Deliberately on stdout, the protocol stream: the host passes stray
+    // lines like this to the plugin's output channel instead of failing.
+    console.log("sample.hello stdout check");
 
     host.commands.register("hello.greet", async (name) => {
       const [fallback, greeting, repeat, shout] = await Promise.all([
