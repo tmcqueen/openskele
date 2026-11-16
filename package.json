@@ -13,6 +13,6 @@
     "dev": "cd apps/workbench && bun tauri dev",
     "build": "cd apps/workbench && bun tauri build",
     "typecheck": "bun run --filter '*' typecheck",
-    "test": "cargo test --workspace"
+    "test": "cargo test --workspace && bun run --cwd apps/workbench test"
   }
 }

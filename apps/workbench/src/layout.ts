@@ -74,14 +74,29 @@ export function createMainArea(dock: DockviewApi): MainArea {
   });
   dock.onDidActivePanelChange(({ panel }) => {
     if (applying || !panel || !MAIN.test(panel.id) || panel.id === current?.activePanel) return;
-    commands.layoutSetActivePanel(panel.id).catch((error) => toast("error", String(error)));
+    // Closing a tab makes Dockview activate a neighbour of its own choosing;
+    // the host picks the next active panel itself. Wait out the rest of the
+    // gesture and drop the activation if the host's active panel was closed.
+    const id = panel.id;
+    queueMicrotask(() => {
+      const closed = current?.activePanel && !dock.getPanel(current.activePanel);
+      if (closed || id === current?.activePanel) return;
+      commands.layoutSetActivePanel(id).catch((error) => toast("error", String(error)));
+    });
   });
 
   return {
     async reconcile(layout) {
       current = layout;
-      if (layout.panels.some((panel) => panel.kind === "editor")) {
-        editorModule ??= await import("./renderers/editor");
+      if (!editorModule && layout.panels.some((panel) => panel.kind === "editor")) {
+        try {
+          editorModule = await import("./renderers/editor");
+        } catch (error) {
+          toast("error", `Could not load the editor: ${error}`);
+          return;
+        }
+        // A newer layout arrived while the editor loaded; it has been applied.
+        if (current !== layout) return;
       }
       applying = true;
       try {
