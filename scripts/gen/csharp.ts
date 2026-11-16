@@ -51,6 +51,9 @@ function type(schema: Schema): string {
       return `IReadOnlyList<${type(schema.items ?? true)}>`;
     case "object":
       return `IReadOnlyDictionary<string, ${type(schema.additionalProperties ?? true)}>`;
+    case undefined:
+      // No `type`: any JSON, like a `true` schema with a description or default.
+      return "JsonElement";
     default:
       throw new Error(`unsupported schema: ${JSON.stringify(schema)}`);
   }

@@ -18,6 +18,12 @@ pub enum Error {
     UnknownPanel(String),
     #[error("unknown output channel: {0}")]
     UnknownChannel(String),
+    #[error("unknown tool: {0}")]
+    UnknownTool(String),
+    #[error("tool already registered: {0}")]
+    DuplicateTool(String),
+    #[error("invalid tool name {0:?}: use lowercase letters, digits and _, starting with a letter")]
+    InvalidToolName(String),
     #[error("unknown plugin: {0}")]
     UnknownPlugin(String),
     #[error("unknown setting: {0}")]

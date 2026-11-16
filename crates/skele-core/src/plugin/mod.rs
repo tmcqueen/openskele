@@ -28,6 +28,7 @@ use crate::containers::{ContainerInfo, VIEWS_CONTAINER};
 use crate::events::HostEvent;
 use crate::keybindings::Keybinding;
 use crate::menus::MenuEntry;
+use crate::tools::{ToolCallResult, ToolInfo, ToolTarget};
 use crate::views::ViewInfo;
 use crate::workbench::Inner;
 use crate::{Error, Result, Workbench};
@@ -179,6 +180,19 @@ impl Workbench {
                 source: Some(id.clone()),
             });
         }
+        for tool in &contributes.tools {
+            let info = ToolInfo {
+                name: tool.name.clone(),
+                title: tool.title.clone(),
+                description: tool.description.clone(),
+                input_schema: tool.input_schema.clone(),
+                read_only: tool.read_only,
+                // Plugins only say whether a tool reads; anything else may change things.
+                destructive: !tool.read_only,
+                source: Some(id.clone()),
+            };
+            inner.tools.register(info, ToolTarget::Plugin(id.clone()))?;
+        }
         for container in &contributes.view_containers {
             self.register_container(ContainerInfo {
                 id: container.id.clone(),
@@ -213,6 +227,7 @@ impl Workbench {
         inner.keybindings.remove_source(id);
         inner.views.remove_source(id);
         inner.containers.remove_source(id);
+        inner.tools.remove_source(id);
         self.fix_layout_containers();
     }
 
@@ -328,6 +343,19 @@ impl Workbench {
             ));
         }
         Ok(Session { peer, child })
+    }
+
+    /// Sends `tool/call` to the plugin, starting it if needed. Failures are
+    /// prefixed with the plugin's name, since the agent reading them may not
+    /// know which plugin a tool belongs to.
+    pub(crate) async fn call_plugin_tool(&self, id: &str, name: &str, arguments: Value) -> Result<ToolCallResult> {
+        let plugin = self.inner.plugins.get(id)?;
+        let label = plugin.manifest.name.clone();
+        let call = async {
+            let peer = self.plugin_peer(id).await?;
+            peer.request::<ToolCall>(ToolCallParams { name: name.to_owned(), arguments }, None).await
+        };
+        call.await.map_err(|e| Error::Other(format!("{label}: {e}")))
     }
 
     fn set_plugin_state(&self, plugin: &Plugin, state: PluginState) {

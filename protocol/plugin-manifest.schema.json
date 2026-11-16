@@ -86,6 +86,14 @@
           "description": "Menu location (e.g. `menubar/Tools`, `view/title`) to entries.",
           "type": "object"
         },
+        "tools": {
+          "default": [],
+          "description": "Tools an agent can call, served by the plugin through `tool/call`.",
+          "items": {
+            "$ref": "#/definitions/ToolContribution"
+          },
+          "type": "array"
+        },
         "viewContainers": {
           "default": [],
           "description": "Icon-strip entries on the app bars; views are placed in them by id.",
@@ -165,6 +173,38 @@
       },
       "required": [
         "command"
+      ],
+      "type": "object"
+    },
+    "ToolContribution": {
+      "properties": {
+        "description": {
+          "description": "What the tool does, written for the agent that decides whether to call it.",
+          "type": "string"
+        },
+        "inputSchema": {
+          "description": "JSON Schema of the `arguments` object."
+        },
+        "name": {
+          "description": "Unique among all tools: lowercase letters, digits and `_`, starting with a letter.",
+          "type": "string"
+        },
+        "readOnly": {
+          "default": false,
+          "description": "The tool only reads. Tools that are not read-only are reported to agents as destructive.",
+          "type": "boolean"
+        },
+        "title": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "inputSchema"
       ],
       "type": "object"
     },
@@ -259,6 +299,7 @@
         "commands": [],
         "keybindings": [],
         "menus": {},
+        "tools": [],
         "viewContainers": [],
         "views": []
       }

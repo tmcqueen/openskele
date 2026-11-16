@@ -14,11 +14,13 @@ runPlugin({
 
   activate(host) {
     const greetings: string[] = [];
-    // Deliberately on stdout, the protocol stream: the host passes stray
-    // lines like this to the plugin's output channel instead of failing.
-    console.log("sample.hello stdout check");
+    // Deliberately on stdout, the protocol stream (the SDK points console.log
+    // at stderr): the host passes stray lines like this to the plugin's
+    // output channel instead of failing.
+    process.stdout.write("sample.hello stdout check\n");
 
-    host.commands.register("hello.greet", async (name) => {
+    /** Greets someone (the `hello.name` setting by default), as configured. */
+    async function greet(name: unknown): Promise<string> {
       const [fallback, greeting, repeat, shout] = await Promise.all([
         host.config.get<string>("hello.name"),
         host.config.get<string>("hello.greeting"),
@@ -36,7 +38,10 @@ runPlugin({
       host.window.showMessage(message);
       host.views.refresh(VIEW);
       return message;
-    });
+    }
+
+    host.commands.register("hello.greet", greet);
+    host.tools.register("hello_greet", ({ name }) => greet(name));
 
     host.commands.register("hello.clear", () => {
       greetings.length = 0;

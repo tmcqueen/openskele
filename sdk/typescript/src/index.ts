@@ -13,6 +13,7 @@ import {
   type MessageLevel,
   type PluginNotifications,
   type PluginRequests,
+  type ToolCallResult,
   type TreeItem,
 } from "./generated/protocol";
 
@@ -31,6 +32,14 @@ export interface Host {
   readonly commands: {
     /** Implements a command declared in the manifest. */
     register(id: string, handler: (...args: unknown[]) => unknown): void;
+  };
+  readonly tools: {
+    /**
+     * Implements a tool declared in the manifest. The handler gets the
+     * arguments, already checked against the tool's `inputSchema`. Return
+     * text, or a full result; a thrown error becomes a result with `isError`.
+     */
+    register(name: string, handler: (args: Record<string, unknown>) => Awaitable<ToolCallResult | string>): void;
   };
   readonly views: {
     /** Supplies the data for a view declared in the manifest. */
@@ -83,6 +92,7 @@ export function runPlugin(definition: PluginDefinition): void {
 
   const commands = new Map<string, (...args: unknown[]) => unknown>();
   const providers = new Map<string, TreeDataProvider>();
+  const tools = new Map<string, (args: Record<string, unknown>) => Awaitable<ToolCallResult | string>>();
   const configListeners: ((changes: ConfigDidChangeParams["changes"]) => void)[] = [];
   const saveListeners: ((event: DocumentDidSaveParams) => void)[] = [];
   const pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
@@ -113,6 +123,7 @@ export function runPlugin(definition: PluginDefinition): void {
         pluginId: params.pluginId,
         workspaceFolder: params.workspaceFolder,
         commands: { register: (id, handler) => void commands.set(id, handler) },
+        tools: { register: (name, handler) => void tools.set(name, handler) },
         views: {
           registerTreeDataProvider: (viewId, provider) => void providers.set(viewId, provider),
           refresh: (viewId) => notify("view/refresh", { viewId }),
@@ -140,6 +151,17 @@ export function runPlugin(definition: PluginDefinition): void {
       if (!handler) throw new RpcError(METHOD_NOT_FOUND, `no handler registered for command ${command}`);
       // JSON-RPC has no `undefined`; a command without a return value yields null.
       return Promise.resolve(handler(...args)).then((value) => value ?? null);
+    },
+    async "tool/call"({ name, arguments: args }) {
+      const handler = tools.get(name);
+      if (!handler) throw new RpcError(METHOD_NOT_FOUND, `no handler registered for tool ${name}`);
+      try {
+        const result = await handler((args ?? {}) as Record<string, unknown>);
+        return typeof result === "string" ? { content: [{ type: "text", text: result }], isError: false } : result;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return { content: [{ type: "text", text: message }], isError: true };
+      }
     },
     async "view/getChildren"({ viewId, parent }) {
       const provider = providers.get(viewId);

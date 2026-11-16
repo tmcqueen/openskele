@@ -4,11 +4,12 @@ members = [
     "crates/skele-protocol",
     "crates/skele-core",
     "crates/tauri-plugin-skele",
+    "crates/skele-mcp-bridge",
     "apps/workbench/src-tauri",
 ]
 # The Tauri crates need the system webview dev libraries; plain `cargo build`
 # and `cargo test` cover the headless core only.
-default-members = ["crates/skele-protocol", "crates/skele-core"]
+default-members = ["crates/skele-protocol", "crates/skele-core", "crates/skele-mcp-bridge"]
 
 [workspace.package]
 version = "0.1.0"

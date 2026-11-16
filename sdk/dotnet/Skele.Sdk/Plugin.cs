@@ -27,6 +27,30 @@ public interface ITreeDataProvider
 /// <summary>Implements a command. The result is returned to the caller as JSON; null for none.</summary>
 public delegate Task<JsonNode?> CommandHandler(IReadOnlyList<JsonElement> args);
 
+/// <summary>
+/// Implements a tool. <paramref name="arguments"/> are already checked against the
+/// tool's <c>inputSchema</c>. A thrown exception becomes a result with <c>IsError</c>.
+/// </summary>
+public delegate Task<ToolCallResult> ToolHandler(JsonElement arguments);
+
+/// <summary>Builds tool results.</summary>
+public static class ToolResults
+{
+    /// <summary>A successful result with one piece of text.</summary>
+    public static ToolCallResult Text(string text) => new()
+    {
+        Content = [new ToolContent { Type = ToolContentType.Text, Text = text }],
+        IsError = false,
+    };
+
+    /// <summary>A failed result whose message the agent reads.</summary>
+    public static ToolCallResult Error(string message) => new()
+    {
+        Content = [new ToolContent { Type = ToolContentType.Text, Text = message }],
+        IsError = true,
+    };
+}
+
 /// <summary>What a plugin can ask of the host.</summary>
 public interface IHost
 {
@@ -35,6 +59,8 @@ public interface IHost
     string? WorkspaceFolder { get; }
 
     ICommands Commands { get; }
+
+    ITools Tools { get; }
 
     IViews Views { get; }
 
@@ -51,6 +77,12 @@ public interface ICommands
 {
     /// <summary>Implements a command declared in the manifest.</summary>
     void Register(string id, CommandHandler handler);
+}
+
+public interface ITools
+{
+    /// <summary>Implements a tool declared in the manifest.</summary>
+    void Register(string name, ToolHandler handler);
 }
 
 public interface IViews

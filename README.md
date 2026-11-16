@@ -9,7 +9,7 @@ JSON-RPC 2.0 over stdio.
 | Path | What it is |
 | --- | --- |
 | `crates/skele-protocol` | Wire types: JSON-RPC envelope, protocol methods, plugin manifest, view models. Source of the schema documents. |
-| `crates/skele-core` | Headless core, no Tauri: command/menu/keybinding/view/view-container registries, the layout (both app bars and the open panels), config store, event bus, plugin host, PTY terminals (portable-pty), document buffers (ropey). |
+| `crates/skele-core` | Headless core, no Tauri: command/menu/keybinding/view/view-container registries, the layout (both app bars and the open panels), config store, event bus, plugin host, PTY terminals (portable-pty), document buffers (ropey), output channels, the tool registry and grants, and the private MCP server (rmcp). |
 | `crates/tauri-plugin-skele` | The core packaged as a Tauri plugin: typed commands (tauri-specta), `Channel` streaming, permissions, native menu built from the menu registry. |
 | `apps/workbench` | The app. `src-tauri` is a few lines of wiring; `src` is the generic renderer (Dockview layout with the app bars as edge groups; tree, list, form, xterm.js terminal, Monaco editor; codicons). |
 | `protocol/` | Generated `openrpc.json` and `plugin-manifest.schema.json`. |
@@ -17,6 +17,7 @@ JSON-RPC 2.0 over stdio.
 | `sdk/dotnet` | The same for .NET 10: generated C# records plus a small runtime, no package dependencies. |
 | `plugins/sample-bun` | Sample plugin in Bun/TypeScript. |
 | `plugins/sample-dotnet` | Sample plugin in C#. |
+| `crates/skele-mcp-bridge` | The stdio MCP server an agent launches; it pipes to the workbench's private socket. |
 | `scripts/gen` | The SDK generators: one shared model of the protocol document, one emitter per language. |
 
 ## Running
@@ -58,7 +59,7 @@ a versioned `initialize` handshake.
 
 | Direction | Methods |
 | --- | --- |
-| host → plugin | `initialize`, `shutdown`, `exit`, `command/execute`, `view/getChildren`, `config/didChange`, `document/didSave` |
+| host → plugin | `initialize`, `shutdown`, `exit`, `command/execute`, `view/getChildren`, `tool/call`, `config/didChange`, `document/didSave` |
 | plugin → host | `window/showMessage`, `terminal/write`, `config/get`, `view/refresh` |
 
 Plugins return view models (`TreeItem`s), never markup; the webview builds DOM
@@ -105,6 +106,46 @@ The layout (bars and open panels) belongs to the core, not the webview: it is
 in the snapshot, every change arrives as a `layoutChanged` event, and clicks
 in the webview are requests to the core. Terminals run in the core too and
 keep their last 64 KiB of output, so a page reload re-attaches to them.
+
+## Tools
+
+Agents drive the workbench through tools. Every tool has a JSON Schema for its
+arguments, checked before it runs, and says whether it only reads and whether
+it can destroy something, so an agent knows what to ask the user about.
+
+Built in: `workbench_snapshot`, `command_execute` (any command, built-in or
+plugin), `view_get_children`, `config_list`, `config_get`, `config_set`,
+`document_open`, `document_read`, `document_edit`, `document_save`,
+`terminal_open`, `terminal_write`, `terminal_read`, `layout_get`, `layout_set`,
+`message_show`, `output_list` and `output_read`.
+
+Plugins add tools in their manifest and implement them with the SDK:
+
+```json
+"contributes": {
+  "tools": [{
+    "name": "hello_greet",
+    "description": "Greets someone and returns the greeting.",
+    "inputSchema": { "type": "object", "properties": { "name": { "type": "string" } } },
+    "readOnly": false
+  }]
+}
+```
+
+```ts
+host.tools.register("hello_greet", ({ name }) => greet(name)); // a string, or { content, isError }
+```
+
+In .NET: `host.Tools.Register("dotnet_runtime_info", _ => Task.FromResult(ToolResults.Text(...)))`.
+Names are lowercase letters, digits and `_`, unique across all plugins. A
+failure is returned to the agent as a result with `isError`, not as a crash.
+
+The tools are served over MCP, privately: only to agents the workbench starts.
+Each agent session gets a grant (a random token); the agent launches
+`skele-mcp-bridge` as a stdio MCP server, and the bridge connects to the
+workbench's local socket (owner-only on Unix) with that token. No TCP port is
+opened, and revoking the grant ends the connection. See
+`docs/adr/0003-private-mcp-server-via-bridge.md`.
 
 ## Output channels
 

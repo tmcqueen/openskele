@@ -3,7 +3,7 @@
   "id": "sample.hello",
   "name": "Hello",
   "version": "0.1.0",
-  "protocol": "0.1",
+  "protocol": "0.2",
   "main": { "command": "bun", "args": ["run", "src/main.ts"] },
   "activationEvents": [],
   "contributes": {
@@ -20,6 +20,14 @@
     "keybindings": [{ "command": "hello.greet", "key": "Mod+Alt+G" }],
     "viewContainers": [{ "id": "hello.container", "title": "Hello", "icon": "comment-discussion" }],
     "views": [{ "id": "hello.greetings", "title": "Greetings", "kind": "tree", "container": "hello.container" }],
+    "tools": [
+      {
+        "name": "hello_greet",
+        "title": "Greet",
+        "description": "Greets someone using the Hello settings and returns the greeting. Without a name it greets the configured default.",
+        "inputSchema": { "type": "object", "properties": { "name": { "type": "string", "description": "Who to greet." } } }
+      }
+    ],
     "configuration": {
       "title": "Hello",
       "properties": {

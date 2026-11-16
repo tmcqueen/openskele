@@ -55,6 +55,25 @@ pub struct Contributes {
     pub views: Vec<ViewContribution>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub configuration: Option<ConfigurationContribution>,
+    /// Tools an agent can call, served by the plugin through `tool/call`.
+    #[serde(default)]
+    pub tools: Vec<ToolContribution>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolContribution {
+    /// Unique among all tools: lowercase letters, digits and `_`, starting with a letter.
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    /// What the tool does, written for the agent that decides whether to call it.
+    pub description: String,
+    /// JSON Schema of the `arguments` object.
+    pub input_schema: Value,
+    /// The tool only reads. Tools that are not read-only are reported to agents as destructive.
+    #[serde(default)]
+    pub read_only: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

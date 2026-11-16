@@ -10,7 +10,7 @@ namespace Skele.Sdk.Protocol;
 
 public static class ProtocolInfo
 {
-    public const string Version = "0.1.0";
+    public const string Version = "0.2.0";
 }
 
 public sealed record CommandExecuteParams
@@ -123,6 +123,42 @@ public sealed record TerminalWriteParams
     public string? Terminal { get; init; }
 }
 
+public sealed record ToolCallParams
+{
+    /// <summary>Arguments, already validated against the tool's `inputSchema`.</summary>
+    [JsonPropertyName("arguments")]
+    public JsonElement? Arguments { get; init; }
+
+    [JsonPropertyName("name")]
+    public required string Name { get; init; }
+}
+
+public sealed record ToolCallResult
+{
+    [JsonPropertyName("content")]
+    public required IReadOnlyList<ToolContent> Content { get; init; }
+
+    [JsonPropertyName("isError")]
+    public bool? IsError { get; init; }
+}
+
+/// <summary>One piece of a tool's result. Only text for now; other kinds would add their own optional fields beside `type`.</summary>
+public sealed record ToolContent
+{
+    [JsonPropertyName("text")]
+    public required string Text { get; init; }
+
+    [JsonPropertyName("type")]
+    public required ToolContentType Type { get; init; }
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<ToolContentType>))]
+public enum ToolContentType
+{
+    [JsonStringEnumMemberName("text")]
+    Text,
+}
+
 /// <summary>One row of a tree or list view.</summary>
 public sealed record TreeItem
 {
@@ -184,6 +220,7 @@ public static class Methods
         public const string Shutdown = "shutdown";
         public const string CommandExecute = "command/execute";
         public const string ViewGetChildren = "view/getChildren";
+        public const string ToolCall = "tool/call";
         public const string Exit = "exit";
         public const string ConfigDidChange = "config/didChange";
         public const string DocumentDidSave = "document/didSave";
@@ -212,6 +249,10 @@ public static class Methods
 [JsonSerializable(typeof(PeerInfo))]
 [JsonSerializable(typeof(ShowMessageParams))]
 [JsonSerializable(typeof(TerminalWriteParams))]
+[JsonSerializable(typeof(ToolCallParams))]
+[JsonSerializable(typeof(ToolCallResult))]
+[JsonSerializable(typeof(ToolContent))]
+[JsonSerializable(typeof(ToolContentType))]
 [JsonSerializable(typeof(TreeItem))]
 [JsonSerializable(typeof(ViewGetChildrenParams))]
 [JsonSerializable(typeof(ViewGetChildrenResult))]
