@@ -184,6 +184,13 @@ mod log_files {
     }
 
     #[test]
+    fn empty_flag_dir_is_off() {
+        let workbench = with(None, Some(Path::new("")));
+        workbench.output("Hello", "hi\r\n");
+        assert!(workbench.log_dir().is_none());
+    }
+
+    #[test]
     fn log_file_name_sanitises() {
         assert_eq!(log_file_name("a/b:c"), "a_b_c.log");
         assert_eq!(log_file_name("Runtime Info"), "Runtime Info.log");

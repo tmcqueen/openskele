@@ -21,6 +21,10 @@ pub const LOG_DIRECTORY: &str = "output.logDirectory";
 /// Lines kept per channel; older ones are dropped.
 pub const OUTPUT_LINES: usize = 10_000;
 
+/// Bytes kept per channel, so long or never-ending lines (a progress bar
+/// redrawn with `\r`) cannot grow without bound either.
+pub const OUTPUT_BYTES: usize = 4 * 1024 * 1024;
+
 /// The host's own channel.
 pub const WORKBENCH_CHANNEL: &str = "Workbench";
 
@@ -28,6 +32,7 @@ pub const WORKBENCH_CHANNEL: &str = "Workbench";
 #[derive(Default)]
 struct Buffer {
     lines: VecDeque<String>,
+    bytes: usize,
 }
 
 impl Buffer {
@@ -38,9 +43,25 @@ impl Buffer {
                 _ => self.lines.push_back(piece.to_owned()),
             }
         }
-        while self.lines.len() > OUTPUT_LINES {
-            self.lines.pop_front();
+        self.bytes += text.len();
+        while self.lines.len() > OUTPUT_LINES || (self.bytes > OUTPUT_BYTES && self.lines.len() > 1) {
+            self.bytes -= self.lines.pop_front().map_or(0, |line| line.len());
         }
+        // One line alone over the limit keeps its end.
+        if self.bytes > OUTPUT_BYTES {
+            let line = self.lines.front_mut().expect("bytes are counted from lines");
+            let mut cut = line.len() - OUTPUT_BYTES;
+            while !line.is_char_boundary(cut) {
+                cut += 1;
+            }
+            line.drain(..cut);
+            self.bytes = line.len();
+        }
+    }
+
+    fn clear(&mut self) {
+        self.lines.clear();
+        self.bytes = 0;
     }
 
     fn text(&self) -> String {
@@ -78,7 +99,7 @@ impl OutputStore {
     pub fn clear(&self, channel: &str) -> bool {
         match self.channels.lock().unwrap().get_mut(channel) {
             Some(buffer) => {
-                buffer.lines.clear();
+                buffer.clear();
                 true
             }
             None => false,
@@ -254,6 +275,37 @@ mod tests {
         let chunk: String = (0..OUTPUT_LINES + 3).map(|i| format!("{i}\n")).collect();
         store.append("a", &chunk);
         assert!(store.read("a").unwrap().starts_with("3\n"));
+    }
+
+    #[test]
+    fn a_line_that_never_ends_is_bounded() {
+        let store = OutputStore::default();
+        let chunk = "x".repeat(100 * 1024);
+        for _ in 0..100 {
+            store.append("a", &chunk); // a progress bar redrawn with \r, never \n
+        }
+        let text = store.read("a").unwrap();
+        assert!(text.len() <= OUTPUT_BYTES, "kept {} bytes", text.len());
+        assert!(text.len() > OUTPUT_BYTES - chunk.len());
+    }
+
+    #[test]
+    fn long_lines_drop_oldest_by_bytes() {
+        let store = OutputStore::default();
+        let line = format!("{}\n", "y".repeat(1023));
+        for i in 0..(OUTPUT_BYTES / 1024 + 10) {
+            store.append("a", &format!("{i:08}{}", &line[8..]));
+        }
+        let text = store.read("a").unwrap();
+        assert!(text.len() <= OUTPUT_BYTES);
+        assert!(text.starts_with("00000010"), "oldest kept: {:?}", &text[..8]);
+    }
+
+    #[test]
+    fn multibyte_text_is_cut_on_a_char_boundary() {
+        let store = OutputStore::default();
+        store.append("a", &"é".repeat(OUTPUT_BYTES)); // twice the limit in bytes
+        assert!(store.read("a").unwrap().chars().all(|c| c == 'é'));
     }
 
     #[test]

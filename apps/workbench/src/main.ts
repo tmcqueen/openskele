@@ -28,7 +28,7 @@ let settings: SettingsPane | undefined;
 let titleBar: TitleBar | undefined;
 const trees = new Map<string, Tree>();
 const pluginStates = new Map<string, PluginState>();
-// Created at load so it follows output from the start; the Output panel shows it when open.
+// Lives for the whole page, so it follows output while the Output panel is closed.
 const output = createOutputPanel(
   { channels: () => commands.outputChannels(), read: (c) => commands.outputRead(c), clear: async (c) => void (await commands.outputClear(c)) },
   createOutput(),
@@ -212,6 +212,7 @@ async function start(): Promise<void> {
     }
   });
   await connect();
+  await output.start();
   await loadSnapshot();
   await loadAppearance();
   // A reload keeps the host's panels; only a fresh start (just the output) opens Settings.

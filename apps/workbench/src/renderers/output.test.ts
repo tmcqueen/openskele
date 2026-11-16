@@ -7,8 +7,9 @@ const { createOutputPanel } = await import("./output");
 let buffers: Record<string, string>;
 let shown: string;
 let cleared: string[];
+let asked = 0;
 const host = {
-  channels: async () => Object.keys(buffers),
+  channels: async () => (asked++, Object.keys(buffers)),
   read: async (channel: string) => buffers[channel] ?? "",
   clear: async (channel: string) => void cleared.push(channel),
 };
@@ -46,9 +47,19 @@ beforeEach(() => {
   cleared = [];
 });
 
+test("nothing is fetched until started, so no event can be missed", async () => {
+  asked = 0;
+  const panel = createOutputPanel(host, view, storage());
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(asked).toBe(0);
+  await panel.start();
+  expect(asked).toBe(1);
+  expect(shown).toBe("started\r\n");
+});
+
 test("lists channels and shows Workbench", async () => {
   const panel = createOutputPanel(host, view, storage());
-  await panel.ready;
+  await panel.start();
   const options = [...select(panel).options].map((o) => o.value);
   expect(options).toEqual(["Workbench", "Hello", "Runtime Info"]);
   expect(shown).toBe("started\r\n");
@@ -56,7 +67,7 @@ test("lists channels and shows Workbench", async () => {
 
 test("switching replays the channel, then follows only it", async () => {
   const panel = createOutputPanel(host, view, storage());
-  await panel.ready;
+  await panel.start();
   await choose(panel, "Hello");
   expect(shown).toBe("hi\r\n");
   panel.append("Hello", "x");
@@ -67,24 +78,24 @@ test("switching replays the channel, then follows only it", async () => {
 test("the selection survives a reload", async () => {
   const store = storage();
   const first = createOutputPanel(host, view, store);
-  await first.ready;
+  await first.start();
   await choose(first, "Hello");
   const second = createOutputPanel(host, view, store);
-  await second.ready;
+  await second.start();
   expect(select(second).value).toBe("Hello");
   expect(shown).toBe("hi\r\n");
 });
 
 test("a stored channel that no longer exists falls back to Workbench", async () => {
   const panel = createOutputPanel(host, view, storage({ "skele.output.channel": "Gone" }));
-  await panel.ready;
+  await panel.start();
   expect(select(panel).value).toBe("Workbench");
   expect(shown).toBe("started\r\n");
 });
 
 test("Clear clears the selected channel; later text still shows", async () => {
   const panel = createOutputPanel(host, view, storage());
-  await panel.ready;
+  await panel.start();
   await choose(panel, "Hello");
   panel.element.querySelector("button")!.click();
   expect(cleared).toEqual(["Hello"]);
@@ -98,7 +109,7 @@ test("Clear clears the selected channel; later text still shows", async () => {
 
 test("a new channel appears in the list without changing the selection", async () => {
   const panel = createOutputPanel(host, view, storage());
-  await panel.ready;
+  await panel.start();
   await choose(panel, "Hello");
   buffers["New"] = "";
   await panel.channelsChanged();

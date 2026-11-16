@@ -93,7 +93,8 @@ impl Workbench {
                 documents: Default::default(),
                 output: Default::default(),
                 log: Default::default(),
-                log_flag: options.log_dir,
+                // An empty directory (`SKELE_LOG_DIR=`) means no flag.
+                log_flag: options.log_dir.filter(|dir| !dir.as_os_str().is_empty()),
                 workspace: options.workspace,
             }),
         };

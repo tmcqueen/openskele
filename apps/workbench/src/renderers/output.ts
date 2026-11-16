@@ -20,8 +20,11 @@ export interface OutputView {
 
 export interface OutputPanel {
   readonly element: HTMLElement;
-  /** Settles once the channel list and the selected channel are shown. */
-  readonly ready: Promise<void>;
+  /**
+   * Fetches the channel list and shows the selected channel. Call it once
+   * host events are subscribed, so nothing written meanwhile is missed.
+   */
+  start(): Promise<void>;
   /** Text written to a channel; shown if it is the selected one. */
   append(channel: string, text: string): void;
   /** A channel was added: refresh the list, keeping the selection. */
@@ -85,17 +88,15 @@ export function createOutputPanel(host: OutputHost, view: OutputView, storage?: 
   });
   clear.addEventListener("click", () => void host.clear(selected));
 
-  const ready = (async () => {
-    const channels = await host.channels();
-    const stored = load(storage);
-    selected = stored && channels.includes(stored) ? stored : WORKBENCH;
-    fill(channels);
-    await show(selected);
-  })();
-
   return {
     element,
-    ready,
+    async start() {
+      const channels = await host.channels();
+      const stored = load(storage);
+      selected = stored && channels.includes(stored) ? stored : WORKBENCH;
+      fill(channels);
+      await show(selected);
+    },
     append(channel, text) {
       if (channel === selected && !loading) view.write(text);
     },
